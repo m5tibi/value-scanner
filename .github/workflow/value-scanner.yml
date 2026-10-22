@@ -1,0 +1,36 @@
+# Ingyenes alternatíva a Renderre: GitHub Actions ütemezés.
+# Figyelem: a GitHub az ütemezett futásokat terhelés idején késleltetheti vagy kihagyhatja,
+# ezért a jelzések késhetnek. Teszteléshez és papíros naplózáshoz elég, élesben a Render megbízhatóbb.
+# A titkokat a repóban: Settings > Secrets and variables > Actions.
+
+name: value-scanner
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}          # kézi indítás az Actions fülről
+
+concurrency:
+  group: value-scanner
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node src/index.js --tick
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SPORTS: ${{ vars.SPORTS || 'soccer_epl,soccer_uefa_champs_league,basketball_euroleague' }}
+          MARKETS: ${{ vars.MARKETS || 'h2h,totals,spreads' }}
+          SOFT_BOOKS: ${{ vars.SOFT_BOOKS || 'onexbet,marathonbet' }}
