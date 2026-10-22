@@ -14,10 +14,13 @@ export class OddsApi {
   }
 
   async #get(path, params) {
+    this.lastCost = null;
     const qs = new URLSearchParams({ apiKey: this.apiKey, ...params });
     const res = await this.fetch(`${BASE}${path}?${qs}`);
     const rem = res.headers.get('x-requests-remaining');
     const used = res.headers.get('x-requests-used');
+    const last = res.headers.get('x-requests-last');
+    this.lastCost = last !== null ? Number(last) : null;
     if (rem !== null) this.remaining = Number(rem);
     if (used !== null) this.used = Number(used);
     if (!res.ok) {

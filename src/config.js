@@ -27,5 +27,7 @@ export function loadConfig(env = process.env) {
     scanIntervalMin: num(env.SCAN_INTERVAL_MIN, 5),
     settleIntervalMin: num(env.SETTLE_INTERVAL_MIN, 60),
     minQuotaRemaining: num(env.MIN_QUOTA_REMAINING, 200),
+    // Napi kreditkeret (budapesti nap szerint). 0 = nincs korlát.
+    dailyCreditBudget: num(env.DAILY_CREDIT_BUDGET, 0),
   };
 }

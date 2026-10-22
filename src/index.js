@@ -15,7 +15,23 @@ import { makeDb } from './db.js';
 const cfg = loadConfig();
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
-async function scanOnce({ api, db, notify }) {
+/**
+ * Napi kreditkeret: a budapesti nap szerint számolja, mennyi kreditet használt a bot.
+ * Az állapot az adatbázisban van, így ütemezett (cron) futásnál is megmarad.
+ */
+async function loadBudget(db) {
+  const today = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Budapest' }).slice(0, 10);
+  const day = await db.getState('credits_day');
+  const used = day === today ? Number(await db.getState('credits_used')) || 0 : 0;
+  return {
+    today, used,
+    canSpend(cost) { return !cfg.dailyCreditBudget || this.used + cost <= cfg.dailyCreditBudget; },
+    add(cost) { this.used += cost; },
+    async save() { await db.setState('credits_day', this.today); await db.setState('credits_used', String(this.used)); },
+  };
+}
+
+async function scanOnce({ api, db, notify, budget }) {
   const books = [cfg.sharpBook, ...cfg.softBooks];
   let newSignals = 0;
   const rejectedTotal = {};
@@ -25,12 +41,19 @@ async function scanOnce({ api, db, notify }) {
       log(`Kvóta alacsony (${api.remaining}), szkennelés leállítva.`);
       break;
     }
+    if (budget && !budget.canSpend(cfg.markets.length)) {
+      log(`Napi kreditkeret elérve (${budget.used}/${cfg.dailyCreditBudget}), szkennelés holnapig szünetel.`);
+      break;
+    }
     let events;
     try {
       events = await api.getOdds(sport, { bookmakers: books, markets: cfg.markets, lookaheadHours: cfg.lookaheadHours });
     } catch (e) {
       log(`Hiba (${sport}): ${e.message}`);
       continue;
+    } finally {
+      // Üres válasz ingyenes; a tényleges költséget a válaszfejléc adja meg.
+      budget?.add(api.lastCost ?? 0);
     }
     const { signals, sharpSnapshots, rejected } = scanEvents(events, cfg);
     for (const [k, v] of Object.entries(rejected)) rejectedTotal[k] = (rejectedTotal[k] ?? 0) + v;
@@ -43,15 +66,18 @@ async function scanOnce({ api, db, notify }) {
       }
     }
   }
-  log(`Szkennelés kész: ${newSignals} új jelzés. Kvóta maradt: ${api.remaining ?? '?'}. Kiszűrve:`, rejectedTotal);
+  const b = budget && cfg.dailyCreditBudget ? ` Ma: ${budget.used}/${cfg.dailyCreditBudget}.` : '';
+  log(`Szkennelés kész: ${newSignals} új jelzés. Kvóta maradt: ${api.remaining ?? '?'}.${b} Kiszűrve:`, rejectedTotal);
 }
 
-async function settleOnce({ api, db }) {
+async function settleOnce({ api, db, budget }) {
   const sports = await db.openSportsToSettle();
   let settled = 0;
   for (const sport of sports) {
+    // Az elszámolás fontosabb a szkennelésnél, ezért a keretet itt csak figyelmeztetésként kezeljük.
     let games;
     try { games = await api.getScores(sport, 3); } catch (e) { log(`Eredmény-hiba (${sport}): ${e.message}`); continue; }
+    finally { budget?.add(api.lastCost ?? 0); }
     for (const g of games) {
       const sc = parseScores(g);
       if (!sc) continue;
@@ -91,13 +117,15 @@ async function reportOnce({ db, notify }, days = 30) {
 
 /** Egy kör: mindig szkennel; elszámol, ha letelt SETTLE_INTERVAL_MIN; riportot küld naponta egyszer 9:00 után. */
 async function tick({ api, db, notify }) {
-  await scanOnce({ api, db, notify }).catch((e) => log('Szkennelési hiba:', e.message));
+  const budget = await loadBudget(db);
+  await scanOnce({ api, db, notify, budget }).catch((e) => log('Szkennelési hiba:', e.message));
 
   const lastSettle = Number(await db.getState('last_settle_ms')) || 0;
   if (Date.now() - lastSettle > cfg.settleIntervalMin * 60e3) {
-    await settleOnce({ api, db }).catch((e) => log('Elszámolási hiba:', e.message));
+    await settleOnce({ api, db, budget }).catch((e) => log('Elszámolási hiba:', e.message));
     await db.setState('last_settle_ms', String(Date.now()));
   }
+  await budget.save();
 
   const [day, time] = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Budapest' }).split(' ');
   if (time >= '09:00:00' && (await db.getState('last_report_day')) !== day) {
