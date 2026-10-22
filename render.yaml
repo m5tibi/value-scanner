@@ -1,0 +1,45 @@
+# Render Blueprint – Dashboard > New > Blueprint, és válaszd ki ezt a repót.
+# Alapértelmezés: Cron Job (csak a futás idejére fizetsz). Ha folyamatos workert szeretnél,
+# kommenteld ki a cron blokkot, és vedd ki a kommentet a worker blokk elől.
+
+services:
+  - type: cron
+    name: value-scanner
+    runtime: node
+    region: frankfurt
+    plan: starter
+    schedule: "*/5 * * * *"          # 5 percenként (UTC)
+    buildCommand: npm ci
+    startCommand: node src/index.js --tick
+    envVars:
+      - key: ODDS_API_KEY
+        sync: false                  # a felületen kell megadni
+      - key: DATABASE_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: NODE_VERSION
+        value: "20"
+      - key: SPORTS
+        value: soccer_epl,soccer_spain_la_liga,soccer_italy_serie_a,soccer_germany_bundesliga,soccer_uefa_champs_league,soccer_uefa_europa_league,basketball_euroleague,basketball_nba
+      - key: MARKETS
+        value: h2h,totals,spreads
+      - key: SOFT_BOOKS
+        value: onexbet,marathonbet
+      - key: LOOKAHEAD_HOURS
+        value: "12"
+      - key: SETTLE_INTERVAL_MIN
+        value: "60"
+      - key: MIN_QUOTA_REMAINING
+        value: "200"
+
+#  - type: worker
+#    name: value-scanner-worker
+#    runtime: node
+#    region: frankfurt
+#    plan: starter
+#    buildCommand: npm ci
+#    startCommand: node src/index.js
+#    envVars: (ugyanazok, mint fent) + SCAN_INTERVAL_MIN=5
