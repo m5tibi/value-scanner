@@ -35,6 +35,7 @@ async function scanOnce({ api, db, notify, budget }) {
   const books = [cfg.sharpBook, ...cfg.softBooks];
   let newSignals = 0;
   const rejectedTotal = {};
+  const st = { events: 0, withSharp: 0, compared: 0, positive: 0, best: null };
 
   for (const sport of cfg.sports) {
     if (api.remaining !== null && api.remaining < cfg.minQuotaRemaining) {
@@ -55,8 +56,10 @@ async function scanOnce({ api, db, notify, budget }) {
       // Üres válasz ingyenes; a tényleges költséget a válaszfejléc adja meg.
       budget?.add(api.lastCost ?? 0);
     }
-    const { signals, sharpSnapshots, rejected } = scanEvents(events, cfg);
+    const { signals, sharpSnapshots, rejected, stats } = scanEvents(events, cfg);
     for (const [k, v] of Object.entries(rejected)) rejectedTotal[k] = (rejectedTotal[k] ?? 0) + v;
+    for (const k of ['events', 'withSharp', 'compared', 'positive']) st[k] += stats[k];
+    if (stats.best && (!st.best || stats.best.edge > st.best.edge)) st.best = { ...stats.best, sport };
 
     for (const snap of sharpSnapshots) await db.updateClosing(snap);
     for (const s of signals) {
@@ -68,6 +71,12 @@ async function scanOnce({ api, db, notify, budget }) {
   }
   const b = budget && cfg.dailyCreditBudget ? ` Ma: ${budget.used}/${cfg.dailyCreditBudget}.` : '';
   log(`Szkennelés kész: ${newSignals} új jelzés. Kvóta maradt: ${api.remaining ?? '?'}.${b} Kiszűrve:`, rejectedTotal);
+  if (st.events) {
+    const best = st.best
+      ? ` Legjobb: ${(st.best.edge * 100).toFixed(1)}% (${st.best.sport}: ${st.best.label} @ ${st.best.book} ${st.best.price}, fair ${st.best.fair_odds.toFixed(2)})`
+      : '';
+    log(`Vizsgálva: ${st.events} meccs (Pinnacle-lel: ${st.withSharp}), ${st.compared} összevetés, ebből pozitív előny: ${st.positive}.${best}`);
+  }
 }
 
 async function settleOnce({ api, db, budget }) {

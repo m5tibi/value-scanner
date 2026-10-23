@@ -15,7 +15,7 @@ function marketsOf(bookmaker) {
 }
 
 /**
- * @returns {{ signals: object[], sharpSnapshots: object[], rejected: Record<string, number> }}
+ * @returns {{ signals: object[], sharpSnapshots: object[], rejected: Record<string, number>, stats: object }}
  *  - signals: szűrőkön átment value-jelzések
  *  - sharpSnapshots: minden friss Pinnacle-csoport fair valószínűségei (a CLV frissítéséhez)
  *  - rejected: hány jelölt esett ki melyik szűrőn (hangoláshoz)
@@ -25,13 +25,17 @@ export function scanEvents(events, cfg, now = new Date()) {
   const sharpSnapshots = [];
   const rejected = {};
   const reject = (why) => { rejected[why] = (rejected[why] ?? 0) + 1; };
+  // Diagnosztika: hány meccset/kimenetelt vizsgált, és mi volt a legjobb (akár küszöb alatti) előny.
+  const stats = { events: 0, withSharp: 0, compared: 0, positive: 0, best: null };
 
   for (const ev of events) {
     const minutesToStart = (Date.parse(ev.commence_time) - now.getTime()) / 60000;
     if (minutesToStart <= 0) continue; // élő meccs: nem foglalkozunk vele
+    stats.events++;
 
     const sharp = ev.bookmakers?.find((b) => b.key === cfg.sharpBook);
     if (!sharp) continue;
+    stats.withSharp++;
     const sharpMarkets = marketsOf(sharp);
 
     for (const [mkKey, sharpMk] of sharpMarkets) {
@@ -63,6 +67,14 @@ export function scanEvents(events, cfg, now = new Date()) {
           if (!best) return;
 
           const edge = best.price * fair[i] - 1;
+          stats.compared++;
+          if (edge > 0) stats.positive++;
+          if (!stats.best || edge > stats.best.edge) {
+            stats.best = {
+              edge, book: best.book, price: best.price, fair_odds: 1 / fair[i],
+              label: `${ev.home_team} – ${ev.away_team} | ${groupKey} ${sOut.name}`,
+            };
+          }
           if (edge < cfg.minEdge) return; // nem value -> nem is számoljuk elutasításnak
           if (edge > cfg.maxEdge) { reject('tul_nagy_elony'); return; }
           if (best.price > cfg.maxOdds || best.price < cfg.minOdds) { reject('odds_tartomanyon_kivul'); return; }
@@ -94,7 +106,7 @@ export function scanEvents(events, cfg, now = new Date()) {
       }
     }
   }
-  return { signals, sharpSnapshots, rejected };
+  return { signals, sharpSnapshots, rejected, stats };
 }
 
 function round(x, d) { const f = 10 ** d; return Math.round(x * f) / f; }
