@@ -8,7 +8,7 @@ services:
     runtime: node
     region: frankfurt
     plan: starter
-    schedule: "*/5 * * * *"          # 5 percenként (UTC)
+    schedule: "*/10 * * * *"         # 10 percenként (UTC)
     buildCommand: npm ci
     startCommand: node src/index.js --tick
     envVars:
@@ -23,17 +23,19 @@ services:
       - key: NODE_VERSION
         value: "20"
       - key: SPORTS
-        value: soccer_epl,soccer_spain_la_liga,soccer_italy_serie_a,soccer_germany_bundesliga,soccer_uefa_champs_league,soccer_uefa_europa_league,basketball_euroleague,basketball_nba
+        value: soccer_epl,soccer_spain_la_liga,soccer_uefa_champs_league,soccer_uefa_europa_league,basketball_euroleague
       - key: MARKETS
-        value: h2h,totals,spreads
+        value: totals,spreads
       - key: SOFT_BOOKS
         value: onexbet,marathonbet
       - key: LOOKAHEAD_HOURS
-        value: "12"
+        value: "3"
       - key: SETTLE_INTERVAL_MIN
         value: "60"
       - key: MIN_QUOTA_REMAINING
-        value: "200"
+        value: "3000"                # ennyi alatt leáll (a VIP Value Tipsternek is maradjon)
+      - key: DAILY_CREDIT_BUDGET
+        value: "260"                 # kb. 8000 kredit/hó
 
 #  - type: worker
 #    name: value-scanner-worker

@@ -49,3 +49,39 @@ create table if not exists value_bot_state (
   value      text,
   updated_at timestamptz not null default now()
 );
+
+-- Supabase: a public sémában lévő táblák a Data API-n (anon kulccsal) is elérhetők lennének.
+-- Az RLS bekapcsolása policy nélkül ezt lezárja; a bot a postgres felhasználóval csatlakozik, rá nem vonatkozik.
+alter table value_signals   enable row level security;
+alter table value_bot_state enable row level security;
+
+-- Sportfolio-csatorna jelzései (userbot naplózza)
+create table if not exists sportfolio_signals (
+  msg_id        bigint primary key,
+  posted_at     timestamptz not null,
+  sport         text,
+  league        text,
+  home          text,
+  away          text,
+  period        text,
+  start_at      timestamptz,
+  value_book    text,
+  value_market  text,
+  value_odds    numeric,
+  ref_book      text,
+  ref_market    text,
+  ref_odds      numeric,
+  to_bet        text,
+  same_market   boolean,
+  threshold     numeric,
+  edge          numeric,
+  verdict       text,          -- mehet | ovatosan | kihagy
+  warnings      text[],
+  -- saját fogadás és eredmény (kézzel kitölthető)
+  my_book       text,
+  my_odds       numeric,
+  my_stake      numeric,
+  result        text,
+  profit        numeric
+);
+alter table sportfolio_signals enable row level security;

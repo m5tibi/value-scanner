@@ -3,7 +3,9 @@
 const list = (v, d) => (v ?? d).split(',').map((s) => s.trim()).filter(Boolean);
 const num = (v, d) => (v === undefined || v === '' ? d : Number(String(v).split('#')[0].trim()));
 
-export function loadConfig(env = process.env) {
+export function loadConfig(rawEnv = process.env) {
+  // Sor végi "# megjegyzés" levágása (egyes .env-betöltők nem teszik meg).
+  const env = Object.fromEntries(Object.entries(rawEnv).map(([k, v]) => [k, typeof v === 'string' ? v.replace(/\s+#.*$/, '').trim() : v]));
   return {
     oddsApiKey: env.ODDS_API_KEY,
     databaseUrl: env.DATABASE_URL,

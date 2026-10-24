@@ -84,6 +84,20 @@ export function makeDb(databaseUrl) {
       return { overall: overall.rows[0], bySport: bySport.rows, byEdge: byEdge.rows };
     },
 
+    /** Sportfolio-jelzés naplózása (üzenet-ID alapján egyszer). */
+    async insertSportfolio({ msgId, sig, a }) {
+      await pool.query(
+        `insert into sportfolio_signals
+           (msg_id, posted_at, sport, league, home, away, period, start_at,
+            value_book, value_market, value_odds, ref_book, ref_market, ref_odds,
+            to_bet, same_market, threshold, edge, verdict, warnings)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+         on conflict (msg_id) do nothing`,
+        [msgId, sig.postedAt, sig.sport, sig.league, sig.home, sig.away, sig.period, sig.startAt,
+          sig.value.book, sig.value.market, sig.value.odds, sig.ref.book, sig.ref.market, sig.ref.odds,
+          a.toBet, a.sameMarket, a.threshold, a.edge, a.verdict, a.warnings]);
+    },
+
     async getState(key) {
       const r = await pool.query(`select value from value_bot_state where key = $1`, [key]);
       return r.rows[0]?.value ?? null;

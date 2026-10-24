@@ -70,7 +70,10 @@ Például 4 aktív sport × 3 piac × 12 kör/óra × 24 óra ≈ **3456 kredit/
 
 - kezdd kevés sporttal és piaccal (pl. `MARKETS=totals,spreads`),
 - növeld a `SCAN_INTERVAL_MIN`-t, vagy csökkentsd a `LOOKAHEAD_HOURS`-t,
-- a `MIN_QUOTA_REMAINING` alatt a szkennelés magától leáll.
+- a `MIN_QUOTA_REMAINING` alatt a szkennelés magától leáll,
+- a `DAILY_CREDIT_BUDGET` napi keretet ad (budapesti nap szerint, az adatbázisban számolva); ha elfogy, a szkennelés másnapig szünetel, az elszámolás tovább fut.
+
+A `render.yaml` alapbeállítása egy 20 000 kredites havi csomaghoz igazodik, amelynek kb. a fele más projekté: 10 percenként, 5 sport, `totals,spreads`, 3 órás előretekintés, napi 260 kredit (≈ 8000/hó).
 
 ## Ismert korlátok
 
@@ -84,3 +87,61 @@ Például 4 aktív sport × 3 piac × 12 kör/óra × 24 óra ≈ **3456 kredit/
 ```bash
 npm test
 ```
+
+---
+
+# Sportfolio-figyelő (saját gépen)
+
+A `src/sportfolio/listener.js` a **saját Telegram-fiókoddal** olvassa a Sportfolio Value-csatornát (userbot, hivatalos Telegram API). Minden új jelzésnél:
+
+- megmondja, **mit kell megtenni** (mindig a nem-Pinnacle lábat), magyarul,
+- kiszámolja a **küszöb-oddsot**: `1 / (1 − 1/Pinnacle-odds)`, felfelé kerekítve,
+- figyelmeztet: eltérő piac a két lábon (pl. `Team1 Win` vs `AH2(0.0)`), 10% feletti „előny” (hibás/elavult vonal), közeli vagy már elkezdett meccs,
+- értékel: ✅ mehet / ⚠️ óvatosan / ⛔ inkább hagyd ki,
+- elküldi a botodon (vagy ha nincs bot, a saját *Mentett üzenetek*-be),
+- ha van `DATABASE_URL`, naplózza a `sportfolio_signals` táblába.
+
+Semmit nem továbbít és nem ír a csatornába; a csatorna adminjai ebből semmit nem látnak. Csak saját használatra.
+
+## Beállítás (egyszer)
+
+1. **Node.js 20.6+** kell (`node -v`). Ha régebbi: nodejs.org → LTS.
+2. A projekt mappájában: `npm install`
+3. **Telegram API-kulcs:** my.telegram.org → bejelentkezés a telefonszámoddal → *API development tools* → bármilyen app-név → kapsz egy `api_id`-t és `api_hash`-t. Írd be a `.env`-be: `TG_API_ID=...`, `TG_API_HASH=...`
+4. **Bejelentkezés:** `npm run sf:login` → telefonszám, a Telegramban kapott kód, (ha van) kétlépcsős jelszó. A végén kiír egy `TG_SESSION=...` sort: másold a `.env`-be. **Ez olyan, mint egy jelszó a fiókodhoz – senkinek ne add oda, ne tedd fel GitHubra.**
+5. **Csatorna kiválasztása:** `npm run sf:channels` → keresd meg a Value-csatornát, és az ID-ját írd a `.env`-be: `SPORTFOLIO_CHANNEL=-100...` (a név egy része is jó, pl. `Value NonStop`).
+6. **Próba:** `npm run sf:backfill` → az utolsó 50 üzenetet kiértékeli a konzolon (nem küld értesítést).
+
+## Futtatás
+
+```bash
+npm run sf:listen
+```
+
+Amíg ez az ablak nyitva van és a gép nem alszik, figyel. Leállítás: Ctrl+C.
+
+**Windowson:** dupla kattintás a `start-figyelo.bat`-ra (leállás esetén 30 mp múlva újraindul). Gépinduláskor automatikusan: Win+R → `shell:startup` → ide tegyél egy parancsikont a `start-figyelo.bat`-ról. Az alvást kapcsold ki: Gépház → Rendszer → Energiagazdálkodás → Alvó állapot: Soha.
+
+**Macen/Linuxon háttérben, újraindulással (opcionális):**
+
+```bash
+npm install -g pm2
+pm2 start "npm run sf:listen" --name sportfolio
+pm2 save
+pm2 startup        # a kiírt parancsot futtasd le (gépinduláskor automatikusan elindul)
+```
+
+Logok: `pm2 logs sportfolio`, leállítás: `pm2 stop sportfolio`.
+
+## Beállítások (`.env`)
+
+| Változó | Alap | Jelentés |
+|---|---|---|
+| `SF_NOTIFY_LEVEL` | `ovatosan` | `mehet` = csak a tiszta jelzések, `ovatosan` = + figyelmeztetésesek, `kihagy` = minden |
+| `SF_MIN_EDGE` | `0.02` | ez alatt figyelmeztet |
+| `SF_MAX_EDGE` | `0.10` | e felett „gyanúsan nagy előny” |
+| `SF_MIN_MINUTES` | `5` | ennél közelebbi kezdésnél figyelmeztet |
+
+A korábbi csatorna-exporton (2817 jelzés) tesztelve: kb. 21% ✅, 37% ⚠️, 42% ⛔.
+
+A naplózott jelzéseknél a `my_odds`, `my_stake`, `result`, `profit` oszlopokba beírhatod a saját fogadásaidat, így később összevethető, hol volt valódi value.
