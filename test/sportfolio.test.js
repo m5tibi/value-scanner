@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseSignal, parseStart } from '../src/sportfolio/parse.js';
-import { analyzeSignal, classifyMarket, isComplementary, formatAnalysis } from '../src/sportfolio/analyze.js';
+import { analyzeSignal, classifyMarket, isComplementary, formatAnalysis, stakeUnits } from '../src/sportfolio/analyze.js';
 
 // Valódi üzenetek a csatornáról (a Telegram-szöveg formájában)
 const GINEBRA = `💰 New surebet found!
@@ -145,4 +145,69 @@ test('formázás nem dob, HTML-biztos', () => {
   const s = parseSignal(KAUNO, now);
   const txt = formatAnalysis(s, analyzeSignal(s, { now }));
   assert.match(txt, /≥ 1.53/);
+});
+
+test('tét egységben: negyed-Kelly, 0,25-re kerekítve, 3 egység korláttal', () => {
+  // p = 1/1.90, odds 2.00 -> Kelly = (2/1.9 - 1)/1 = 5,26% -> negyed = 1,32% -> 1,25 E
+  assert.equal(stakeUnits(1 / 1.9, 2.0), 1.25);
+  // p = 1/1.80, odds 2.00 -> Kelly 11,1% -> negyed 2,78% -> 2,75 E
+  assert.equal(stakeUnits(1 / 1.8, 2.0), 2.75);
+  // p = 1/1.80, odds 2.20 -> Kelly 18,5% -> negyed 4,6% -> korlát 3 E
+  assert.equal(stakeUnits(1 / 1.8, 2.2), 3);
+  // küszöb alatt nincs tét
+  assert.equal(stakeUnits(1 / 1.9, 1.85), 0);
+});
+
+test('Tochigi: tét-lépcső a jelzés oddsától lefelé, a kihagy-jelzésnél nincs tét', () => {
+  const now = new Date('2026-10-24T07:44:30Z');
+  const a = analyzeSignal(parseSignal(TOCHIGI, now), { now });
+  assert.ok(a.stakes.length >= 2);
+  assert.equal(a.stakes[0].odds, 2.02);
+  assert.ok(a.stakes[0].units > a.stakes.at(-1).units);
+  assert.match(formatAnalysis(parseSignal(TOCHIGI, now), a), /💰 Tét: <b>[\d,]+ E<\/b> @2\.02/);
+  const f = analyzeSignal(parseSignal(FINN, now), { now });
+  assert.equal(f.stakes.length, 0);
+});
+
+const HUGE = `💰 New surebet found!
+Profit: 18.2%
+Sport: Handball
+League: World. World Championship Qualification Women
+Event: Kosovo Women - Estonia Women [Regular time]
+Start at : 24 Oct 17:00 UTC
+
+Pinnacle:
+▫️AH1(-8.5) → 1.84
+▫️Stake: 58 $ Place Bet
+1xbet:
+▫️AH2(+8.5) → 2.8
+▫️Stake: 42 $ Place Bet`;
+
+test('20% feletti előny azonos piacon: óvatosan (nem kihagy), tét max 1 E', () => {
+  const now = new Date('2026-10-24T14:00:00Z');
+  const a = analyzeSignal(parseSignal(HUGE, now), { now });
+  assert.ok(a.edge > 0.20);
+  assert.equal(a.category, 'nagyon_nagy_elony');
+  assert.equal(a.verdict, 'ovatosan');
+  assert.ok(a.stakes.length > 0 && a.stakes.every((x) => x.units <= 1));
+  assert.match(a.warnings.join(' '), /Nagyon nagy eltérés/);
+});
+
+test('eltérő piac továbbra is kihagy, akármekkora az előny', () => {
+  const now = new Date('2026-10-22T15:05:00Z');
+  const a = analyzeSignal(parseSignal(FINN, now), { now });
+  assert.equal(a.verdict, 'kihagy');
+});
+
+import { durationHu, sportHu } from '../src/format.js';
+test('magyar idő- és sportág-formázás', () => {
+  assert.equal(durationHu(45), '45 perc');
+  assert.equal(durationHu(62), '1 óra 2 perc');
+  assert.equal(durationHu(120), '2 óra');
+  assert.equal(durationHu(1545), '1 nap 1 óra 45 perc');
+  assert.equal(sportHu('Soccer'), 'Foci');
+  assert.equal(sportHu('Hockey'), 'Jégkorong');
+  assert.equal(sportHu('soccer_epl'), 'Foci');
+  assert.equal(sportHu('Counter-Strike'), 'E-sport · Counter-Strike');
+  assert.equal(sportHu('Curling'), 'Curling');
 });
