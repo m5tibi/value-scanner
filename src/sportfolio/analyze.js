@@ -116,7 +116,7 @@ export function stakeLadder(p, signalOdds, thresholdRaw, stakeOpts) {
     .filter((x) => x.units > 0);
 }
 
-export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes = 5, now = new Date(), stake: stakeOpts } = {}) {
+export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, hugeEdge = 0.20, hugeMaxUnits = 1, minMinutes = 5, now = new Date(), stake: stakeOpts } = {}) {
   const valueMk = classifyMarket(sig.value.market);
   const refMk = classifyMarket(sig.ref.market);
   const sameMarket = isComplementary(valueMk, refMk);
@@ -128,7 +128,13 @@ export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes 
 
   const warnings = [];
   if (!sameMarket) warnings.push('A két láb NEM ugyanaz a piac (pl. eltérő döntetlen-kezelés vagy vonal) – a küszöb nem megbízható.');
-  if (edge > maxEdge) warnings.push(`Gyanúsan nagy előny (${(edge * 100).toFixed(0)}%) – valószínűleg elavult vagy hibás odds, az iroda érvénytelenítheti.`);
+  // Előny-kategória: normál / nagy (10–20%) / nagyon nagy (20% felett)
+  const category = edge > hugeEdge ? 'nagyon_nagy_elony' : edge > maxEdge ? 'nagy_elony' : 'normal';
+  if (category === 'nagyon_nagy_elony') {
+    warnings.push(`Nagyon nagy eltérés (${(edge * 100).toFixed(0)}%) – csak ha nálad is ≥ küszöb. Az iroda érvénytelenítheti vagy hamarabb limitálhat; tét max. ${String(hugeMaxUnits).replace('.', ',')} E.`);
+  } else if (category === 'nagy_elony') {
+    warnings.push(`Gyanúsan nagy előny (${(edge * 100).toFixed(0)}%) – a jelzés oddsa valószínűleg elavult, nézd meg a saját irodádat.`);
+  }
   if (minutesToStart !== null && minutesToStart < 0) warnings.push('A meccs már elkezdődött – a jelzés élő oddsra vonatkozhat.');
   else if (minutesToStart !== null && minutesToStart < minMinutes) warnings.push(`Kezdésig csak ${minutesToStart} perc.`);
   if (edge < minEdge) warnings.push(`Kicsi az előny már a jelzésben is (${(edge * 100).toFixed(1)}%).`);
@@ -136,12 +142,16 @@ export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes 
   if (valueMk.type === 'UNKNOWN') warnings.push(`Ismeretlen piackód: ${sig.value.market}`);
 
   let verdict;
-  if (!sameMarket || edge > 0.20 || (minutesToStart !== null && minutesToStart < 0)) verdict = 'kihagy';
+  // Csak az eltérő piac és a már elkezdett meccs kihagyandó; a nagy előnyt a saját oddsod küszöb-ellenőrzése szűri.
+  if (!sameMarket || (minutesToStart !== null && minutesToStart < 0)) verdict = 'kihagy';
   else if (warnings.length) verdict = 'ovatosan';
   else verdict = 'mehet';
 
   const p = 1 / threshold; // konzervatív fair valószínűség
-  const stakes = verdict === 'kihagy' || valueMk.type === 'UNKNOWN' ? [] : stakeLadder(p, sig.value.odds, threshold, stakeOpts);
+  const effStake = category === 'nagyon_nagy_elony'
+    ? { ...stakeOpts, maxUnits: Math.min(stakeOpts?.maxUnits ?? 3, hugeMaxUnits) }
+    : stakeOpts;
+  const stakes = verdict === 'kihagy' || valueMk.type === 'UNKNOWN' ? [] : stakeLadder(p, sig.value.odds, threshold, effStake);
 
   return {
     toBet: describe(valueMk, sig.home, sig.away),
@@ -150,6 +160,7 @@ export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes 
     sameMarket,
     threshold: Math.ceil(threshold * 100) / 100, // felfelé kerekítve, hogy biztosan meglegyen
     edge,
+    category,
     minutesToStart,
     warnings,
     verdict,

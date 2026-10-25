@@ -25,6 +25,8 @@ const opts = {
   minEdge: Number(env.SF_MIN_EDGE ?? 0.02),
   maxEdge: Number(env.SF_MAX_EDGE ?? 0.10),
   minMinutes: Number(env.SF_MIN_MINUTES ?? 5),
+  hugeEdge: Number(env.SF_HUGE_EDGE ?? 0.20),
+  hugeMaxUnits: Number(env.SF_HUGE_MAX_UNITS ?? 1),
   // Tét egységben: 1 egység = a bankroll SF_UNIT_PCT %-a; tört Kelly, felső korláttal.
   stake: {
     kellyFraction: Number(env.SF_KELLY_FRACTION ?? 0.25),
