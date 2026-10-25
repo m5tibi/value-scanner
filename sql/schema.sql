@@ -85,3 +85,6 @@ create table if not exists sportfolio_signals (
   profit        numeric
 );
 alter table sportfolio_signals enable row level security;
+
+-- Előny-kategória (normal | nagy_elony | nagyon_nagy_elony) a későbbi kiértékeléshez
+alter table sportfolio_signals add column if not exists category text;
