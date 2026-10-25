@@ -179,8 +179,9 @@ export function formatAnalysis(sig, a) {
   const when = a.minutesToStart === null ? '' : a.minutesToStart >= 0 ? ` (${a.minutesToStart} perc múlva)` : ' (már megy)';
   return [
     `${ICON[a.verdict]} <b>${TEXT[a.verdict]}</b>`,
-    `<b>${esc(sig.home)} – ${esc(sig.away)}</b>`,
-    `${esc(sig.sport)} · ${esc(sig.league)}`,
+    // <code> = koppintásra vágólapra kerül a Telegramban (a csapatnevek külön-külön, és a liga is)
+    `<code>${esc(sig.home)}</code> – <code>${esc(sig.away)}</code>`,
+    `${esc(sig.sport)} · <code>${esc(sig.league)}</code>`,
     `🕒 ${start}${when} · ${esc(periodHu(sig.period))}`,
     ``,
     `👉 <b>${esc(a.toBet)}</b>`,
