@@ -25,6 +25,12 @@ const opts = {
   minEdge: Number(env.SF_MIN_EDGE ?? 0.02),
   maxEdge: Number(env.SF_MAX_EDGE ?? 0.10),
   minMinutes: Number(env.SF_MIN_MINUTES ?? 5),
+  // Tét egységben: 1 egység = a bankroll SF_UNIT_PCT %-a; tört Kelly, felső korláttal.
+  stake: {
+    kellyFraction: Number(env.SF_KELLY_FRACTION ?? 0.25),
+    maxUnits: Number(env.SF_MAX_UNITS ?? 3),
+    unitPct: Number(env.SF_UNIT_PCT ?? 1),
+  },
 };
 // mehet = csak a tiszta jelzések; ovatosan = + figyelmeztetésesek (alap); kihagy = minden
 const notifyLevel = LEVELS[env.SF_NOTIFY_LEVEL ?? 'ovatosan'] ?? 1;

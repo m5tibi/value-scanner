@@ -90,7 +90,33 @@ export function describe(mk, home, away) {
  * @param sig  parseSignal() eredménye
  * @param opts { minEdge, maxEdge, minMinutes, now }
  */
-export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes = 5, now = new Date() } = {}) {
+/**
+ * Javasolt tét egységben (1 egység = a bankroll unitPct %-a), tört Kelly alapján, felső korláttal.
+ * p = a megteendő oldal fair valószínűsége, odds = a saját irodád oddsa.
+ * 0,25 egységre lefelé kerekítve; ha nincs előny, 0.
+ */
+export function stakeUnits(p, odds, { kellyFraction = 0.25, maxUnits = 3, unitPct = 1 } = {}) {
+  if (!(odds > 1) || !(p > 0 && p < 1)) return 0;
+  const kelly = (p * odds - 1) / (odds - 1); // a bankroll ekkora része a teljes Kelly
+  if (kelly <= 0) return 0;
+  const units = (kelly * kellyFraction * 100) / unitPct;
+  return Math.min(maxUnits, Math.floor(units * 4) / 4);
+}
+
+/** Tét-lépcső: néhány oddsszinten (a jelzés oddsától lefelé) mennyi a javasolt tét. */
+export function stakeLadder(p, signalOdds, thresholdRaw, stakeOpts) {
+  const levels = new Set([signalOdds]);
+  for (const f of [1.06, 1.03]) {
+    const o = Math.ceil(thresholdRaw * f * 100) / 100;
+    if (o < signalOdds) levels.add(o);
+  }
+  return [...levels]
+    .sort((a, b) => b - a)
+    .map((odds) => ({ odds, units: stakeUnits(p, odds, stakeOpts) }))
+    .filter((x) => x.units > 0);
+}
+
+export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes = 5, now = new Date(), stake: stakeOpts } = {}) {
   const valueMk = classifyMarket(sig.value.market);
   const refMk = classifyMarket(sig.ref.market);
   const sameMarket = isComplementary(valueMk, refMk);
@@ -114,8 +140,12 @@ export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes 
   else if (warnings.length) verdict = 'ovatosan';
   else verdict = 'mehet';
 
+  const p = 1 / threshold; // konzervatív fair valószínűség
+  const stakes = verdict === 'kihagy' || valueMk.type === 'UNKNOWN' ? [] : stakeLadder(p, sig.value.odds, threshold, stakeOpts);
+
   return {
     toBet: describe(valueMk, sig.home, sig.away),
+    stakes,
     valueMarket: valueMk,
     sameMarket,
     threshold: Math.ceil(threshold * 100) / 100, // felfelé kerekítve, hogy biztosan meglegyen
@@ -127,6 +157,7 @@ export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes 
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const fmtU = (u) => String(u).replace('.', ',');
 const ICON = { mehet: '✅', ovatosan: '⚠️', kihagy: '⛔' };
 const TEXT = { mehet: 'Mehet, ha megvan a küszöb', ovatosan: 'Óvatosan', kihagy: 'Inkább hagyd ki' };
 
@@ -143,6 +174,9 @@ export function formatAnalysis(sig, a) {
     ``,
     `👉 <b>${esc(a.toBet)}</b>`,
     `Csak ha az odds <b>≥ ${a.threshold.toFixed(2)}</b>`,
+    ...(a.stakes?.length
+      ? [`💰 Tét: ${a.stakes.map((s, i) => (i === 0 ? `<b>${fmtU(s.units)} E</b> @${s.odds.toFixed(2)}` : `${fmtU(s.units)} E @${s.odds.toFixed(2)}`)).join(' · ')}`]
+      : []),
     `Jelzésben: ${esc(sig.value.book)} ${sig.value.odds} · előny ${(a.edge * 100).toFixed(1)}%`,
     `Referencia: ${esc(sig.ref.book)} ${esc(sig.ref.market)} @ ${sig.ref.odds}`,
     ...(a.warnings.length ? ['', ...a.warnings.map((w) => `⚠️ ${esc(w)}`)] : []),
