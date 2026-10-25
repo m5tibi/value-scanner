@@ -1,3 +1,5 @@
+import { sportHu, untilHu, durationHu } from '../format.js';
+
 // Sportfolio-jelzés kiértékelése: mit kell megtenni, mi a küszöb-odds, és milyen csapdák vannak benne.
 
 /** Piac-kód értelmezése, pl. "AH1(-8.5)", "TO(3.0) for Team1", "Team2 Win", "X2", "AH1(-1.5) - Sets". */
@@ -136,7 +138,7 @@ export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, hugeEdge = 
     warnings.push(`Gyanúsan nagy előny (${(edge * 100).toFixed(0)}%) – a jelzés oddsa valószínűleg elavult, nézd meg a saját irodádat.`);
   }
   if (minutesToStart !== null && minutesToStart < 0) warnings.push('A meccs már elkezdődött – a jelzés élő oddsra vonatkozhat.');
-  else if (minutesToStart !== null && minutesToStart < minMinutes) warnings.push(`Kezdésig csak ${minutesToStart} perc.`);
+  else if (minutesToStart !== null && minutesToStart < minMinutes) warnings.push(`Kezdésig csak ${durationHu(minutesToStart)}.`);
   if (edge < minEdge) warnings.push(`Kicsi az előny már a jelzésben is (${(edge * 100).toFixed(1)}%).`);
   if (valueMk.type === 'EH') warnings.push('Európai (háromesélyes) hendikep – ne keverd össze az ázsiaival.');
   if (valueMk.type === 'UNKNOWN') warnings.push(`Ismeretlen piackód: ${sig.value.market}`);
@@ -176,12 +178,12 @@ export function formatAnalysis(sig, a) {
   const start = sig.startAt
     ? sig.startAt.toLocaleString('hu-HU', { timeZone: 'Europe/Budapest', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
     : '?';
-  const when = a.minutesToStart === null ? '' : a.minutesToStart >= 0 ? ` (${a.minutesToStart} perc múlva)` : ' (már megy)';
+  const when = untilHu(a.minutesToStart);
   return [
     `${ICON[a.verdict]} <b>${TEXT[a.verdict]}</b>`,
     // <code> = koppintásra vágólapra kerül a Telegramban (a csapatnevek külön-külön, és a liga is)
     `<code>${esc(sig.home)}</code> – <code>${esc(sig.away)}</code>`,
-    `${esc(sig.sport)} · <code>${esc(sig.league)}</code>`,
+    `${esc(sportHu(sig.sport))} · <code>${esc(sig.league)}</code>`,
     `🕒 ${start}${when} · ${esc(periodHu(sig.period))}`,
     ``,
     `👉 <b>${esc(a.toBet)}</b>`,
