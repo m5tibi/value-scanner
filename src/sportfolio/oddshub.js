@@ -16,7 +16,7 @@
 
 import { devig, margin } from '../devig.js';
 import { sportHu, untilHu } from '../format.js';
-import { stakeLadder } from './analyze.js';
+import { stakeLadder, formatStakes } from './analyze.js';
 
 const NUM = '(\\d+(?:\\.\\d+)?)';
 const clean = (s) => s.replace(/\*/g, '').trim();
@@ -203,7 +203,7 @@ function tippmixHint(sig) {
   return null;
 }
 
-export function analyzeOddsHub(sig, { minEdge = 0.02, hugeEdge = 0.20, hugeMaxUnits = 1, estMaxUnits = 1, maxMargin = 0.06, now = new Date(), stake: stakeOpts } = {}) {
+export function analyzeOddsHub(sig, { minEdge = 0.02, hugeEdge = 0.20, hugeMaxUnits = 1, estMaxUnits = 1, maxMargin = 0.06, wildMargin = 0.10, now = new Date(), stake: stakeOpts } = {}) {
   const warnings = [];
   const minutesToStart = sig.startAt ? Math.round((sig.startAt.getTime() - now.getTime()) / 60000) : null;
   const pinOdds = sig.pin.map((x) => x.odds);
@@ -241,7 +241,8 @@ export function analyzeOddsHub(sig, { minEdge = 0.02, hugeEdge = 0.20, hugeMaxUn
   const fairOdds = 1 / p;
   // Minimum odds: fair + minEdge (becslésnél dupla ráhagyással)
   const minOdds = ceil2(fairOdds * (1 + (estimated ? 2 * minEdge : minEdge)));
-  if (pinMargin > maxMargin) warnings.push(`A Pinnacle árrése itt nagy (${(pinMargin * 100).toFixed(1)}%), a fair odds pontatlanabb.`);
+  if (pinMargin > wildMargin) warnings.push(`A Pinnacle árrése nagyon nagy (${(pinMargin * 100).toFixed(1)}%): kis piac, a fair odds bizonytalan – tét max. 1 E.`);
+  else if (pinMargin > maxMargin) warnings.push(`A Pinnacle árrése itt nagy (${(pinMargin * 100).toFixed(1)}%), a fair odds pontatlanabb.`);
   if (sig.market.alt) warnings.push('Alternatív vonal: alacsonyabb limit, nagyobb árrés a Pinnacle-nél.');
   if (edge > hugeEdge) warnings.push(`Nagyon nagy eltérés (${(edge * 100).toFixed(0)}%) – valószínűleg hír (sérülés, kezdő) mozgatta; tét max. ${String(hugeMaxUnits).replace('.', ',')} E.`);
   if (minutesToStart !== null && minutesToStart < 0) warnings.push('A meccs már elkezdődött.');
@@ -257,6 +258,7 @@ export function analyzeOddsHub(sig, { minEdge = 0.02, hugeEdge = 0.20, hugeMaxUn
   let maxUnits = stakeOpts?.maxUnits ?? 3;
   if (verdict === 'ovatosan') maxUnits = Math.min(maxUnits, estimated ? estMaxUnits : 1.5);
   if (edge > hugeEdge) maxUnits = Math.min(maxUnits, hugeMaxUnits);
+  if (pinMargin > wildMargin) maxUnits = Math.min(maxUnits, 1);
   const stakes = verdict === 'kihagy' ? [] : stakeLadder(p, softOdds, minOdds / (1 + minEdge), { ...stakeOpts, maxUnits });
 
   return {
@@ -271,7 +273,6 @@ export function analyzeOddsHub(sig, { minEdge = 0.02, hugeEdge = 0.20, hugeMaxUn
 // ---------- Formázás ----------
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-const fmtU = (u) => String(u).replace('.', ',');
 const ICON = { mehet: '✅', ovatosan: '⚠️', kihagy: '⛔' };
 const TEXT = { mehet: 'Mehet, ha megvan a küszöb', ovatosan: 'Óvatosan', kihagy: 'Inkább hagyd ki' };
 const pct = (x) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`;
@@ -302,7 +303,7 @@ export function formatOddsHub(sig, a, { channel } = {}) {
       : `Csak ha az odds <b>≥ ${a.minOdds.toFixed(2)}</b>`);
   }
   if (a.stakes?.length) {
-    lines.push(`💰 Tét: ${a.stakes.map((s, i) => (i === 0 ? `<b>${fmtU(s.units)} E</b> @${s.odds.toFixed(2)}` : `${fmtU(s.units)} E @${s.odds.toFixed(2)}`)).join(' · ')}`);
+    lines.push(`💰 Tét: ${formatStakes(a.stakes)}`);
   }
   lines.push(`${esc(sig.refBook)}${lineInfo}: ${move} · árrés ${(a.pinMargin * 100).toFixed(1)}%`);
   if (sig.theirEv !== null) lines.push(`Jelzésben: EV ${pct(sig.theirEv)} · tét ${sig.theirStake ?? '?'}u`);

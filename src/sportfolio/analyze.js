@@ -118,6 +118,23 @@ export function stakeLadder(p, signalOdds, thresholdRaw, stakeOpts) {
     .filter((x) => x.units > 0);
 }
 
+/**
+ * Tét-lépcső kiírása; az egymás utáni azonos tétű szinteket összevonja:
+ *   [{2.06,1.5},{1.85,1.5},{1.80,1}] -> "<b>1,5 E</b> @2.06–1.85 · 1 E @1.80"
+ */
+export function formatStakes(stakes) {
+  const groups = [];
+  for (const s of stakes) {
+    const g = groups.at(-1);
+    if (g && g.units === s.units) g.low = s.odds; else groups.push({ units: s.units, high: s.odds, low: s.odds });
+  }
+  const u = (x) => String(x).replace('.', ',');
+  return groups.map((g, i) => {
+    const odds = g.low < g.high ? `@${g.high.toFixed(2)}–${g.low.toFixed(2)}` : `@${g.high.toFixed(2)}`;
+    return i === 0 ? `<b>${u(g.units)} E</b> ${odds}` : `${u(g.units)} E ${odds}`;
+  }).join(' · ');
+}
+
 export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, hugeEdge = 0.20, hugeMaxUnits = 1, minMinutes = 5, now = new Date(), stake: stakeOpts } = {}) {
   const valueMk = classifyMarket(sig.value.market);
   const refMk = classifyMarket(sig.ref.market);
@@ -170,7 +187,6 @@ export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, hugeEdge = 
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-const fmtU = (u) => String(u).replace('.', ',');
 const ICON = { mehet: '✅', ovatosan: '⚠️', kihagy: '⛔' };
 const TEXT = { mehet: 'Mehet, ha megvan a küszöb', ovatosan: 'Óvatosan', kihagy: 'Inkább hagyd ki' };
 
@@ -189,7 +205,7 @@ export function formatAnalysis(sig, a) {
     `👉 <b>${esc(a.toBet)}</b>`,
     `Csak ha az odds <b>≥ ${a.threshold.toFixed(2)}</b>`,
     ...(a.stakes?.length
-      ? [`💰 Tét: ${a.stakes.map((s, i) => (i === 0 ? `<b>${fmtU(s.units)} E</b> @${s.odds.toFixed(2)}` : `${fmtU(s.units)} E @${s.odds.toFixed(2)}`)).join(' · ')}`]
+      ? [`💰 Tét: ${formatStakes(a.stakes)}`]
       : []),
     `Jelzésben: ${esc(sig.value.book)} ${sig.value.odds} · előny ${(a.edge * 100).toFixed(1)}%`,
     `Referencia: ${esc(sig.ref.book)} ${esc(sig.ref.market)} @ ${sig.ref.odds}`,

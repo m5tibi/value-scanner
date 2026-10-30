@@ -17,6 +17,7 @@ import { analyzeSignal, formatAnalysis } from './analyze.js';
 import { makeNotifier } from '../telegram.js';
 import { makeFollowUp } from './followup.js';
 import { parseOddsHub, analyzeOddsHub, formatOddsHub, markEmphasis } from './oddshub.js';
+import { makeConfirmTracker, directionSf, directionOh, confirmLines } from './confirm.js';
 import { improvedHeader } from '../alerts.js';
 
 // Sor végi "# megjegyzés" levágása (egyes .env-betöltők nem teszik meg).
@@ -203,6 +204,17 @@ async function main() {
     } catch (e) { log('Követési adatok betöltése sikertelen:', e.message); }
   }
 
+  // 🔁 / ↔️ kereszt-megerősítés a csatornák között
+  const confirm = makeConfirmTracker();
+  const confirmEntry = (r, title) => ({
+    channel: title, home: r.sig.home, away: r.sig.away, startAt: r.sig.startAt, at: new Date(),
+    dir: r.kind === 'sf' ? directionSf(r.sig, r.a) : directionOh(r.sig),
+    label: r.kind === 'sf'
+      ? `${r.a.toBet} @${r.sig.value.odds} ${r.sig.value.book}`
+      : `${r.a.toBet} @${r.a.softOdds ?? '?'} ${r.sig.soft.book}`,
+  });
+  const names = (xs) => [...new Set(xs.map((x) => x.channel))].join(', ') || null;
+
   client.addEventHandler(async (event) => {
     const m = event.message;
     const chId = m?.peerId?.channelId?.toString();
@@ -213,13 +225,25 @@ async function main() {
       if (!r) return; // capper-tipp vagy egyéb üzenet
       log(`[${title}] ${short(r)}`);
       await save(r, m, chId, title);
+
+      const entry = confirmEntry(r, title);
+      const cf = confirm.check(entry);
+      confirm.add(entry);
+      if (cf.confirms.length || cf.contradicts.length) {
+        log(`  ↳ ${cf.confirms.length ? `🔁 megerősítve: ${names(cf.confirms)}` : ''}${cf.contradicts.length ? ` ↔️ ellentmondás: ${names(cf.contradicts)}` : ''}`);
+        if (db) {
+          await db.setConfirmation(r.kind, { channelId: chId, msgId: m.id },
+            { confirmedBy: names(cf.confirms), contradictedBy: names(cf.contradicts) }).catch((e) => log('DB-hiba:', e.message));
+        }
+      }
       if (LEVELS[r.a.verdict] > notifyLevel) return;
 
       const f = r.kind === 'sf' ? { sig: r.sig, a: r.a } : ohFollow(r.sig, r.a);
       const d = follow.decide(f.sig, f.a);
       if (d.action === 'repeat') { log('  ↳ ismétlés (nem javult eléggé), nem küldöm újra'); return; }
+      const head = [...(d.action === 'improved' ? [improvedHeader(d.prev, d.cur)] : []), ...confirmLines(cf)];
       const text = render(r, title);
-      await notify(d.action === 'improved' ? `${improvedHeader(d.prev, d.cur)}\n\n${text}` : text);
+      await notify(head.length ? `${head.join('\n')}\n\n${text}` : text);
       const key = r.kind === 'sf' ? `sf:${m.id}` : `oh:${chId}:${m.id}`;
       follow.record(f.sig, f.a, key, d.action);
       if (db) {

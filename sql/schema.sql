@@ -138,3 +138,9 @@ create table if not exists oddshub_signals (
   primary key (channel_id, msg_id)
 );
 alter table oddshub_signals enable row level security;
+
+-- Kereszt-megerősítés: melyik másik csatorna jelezte ugyanazt (🔁) vagy az ellenkezőjét (↔️)
+alter table sportfolio_signals add column if not exists confirmed_by  text;
+alter table sportfolio_signals add column if not exists contradicted_by text;
+alter table oddshub_signals    add column if not exists confirmed_by  text;
+alter table oddshub_signals    add column if not exists contradicted_by text;

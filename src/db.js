@@ -184,6 +184,18 @@ export function makeDb(databaseUrl) {
       }
     },
 
+    /** 🔁/↔️ rögzítése a későbbi kiértékeléshez (kind: 'sf' | 'oh'). */
+    async setConfirmation(kind, { channelId, msgId }, { confirmedBy, contradictedBy }) {
+      if (!confirmedBy && !contradictedBy) return;
+      if (kind === 'sf') {
+        await pool.query(`update sportfolio_signals set confirmed_by = $2, contradicted_by = $3 where msg_id = $1`,
+          [msgId, confirmedBy, contradictedBy]);
+      } else {
+        await pool.query(`update oddshub_signals set confirmed_by = $3, contradicted_by = $4 where channel_id = $1 and msg_id = $2`,
+          [channelId, msgId, confirmedBy, contradictedBy]);
+      }
+    },
+
     async getState(key) {
       const r = await pool.query(`select value from value_bot_state where key = $1`, [key]);
       return r.rows[0]?.value ?? null;

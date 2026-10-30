@@ -163,3 +163,12 @@ A figyelő több csatornát is olvas (`SPORTFOLIO_CHANNELS`, vesszővel; a régi
   és megmondja, hol keresd a TippmixPro-n (pl. »Ki nyeri? – Teljes esemény«).
   Eltérő vonalnál („EV: None”) becsül: gólos sportoknál Poisson, kosárnál/kézinél normális eloszlás; ezt jelöli, és a tétet 1 E-re korlátozza.
 - Naplózás: `oddshub_signals` tábla. A 🔔 javulás ezekre is működik.
+
+## Kereszt-megerősítés (v0.8)
+
+Ha ugyanarra a meccsre (eltérő névírás mellett is) és ugyanabba az irányba (hazai/vendég, több/kevesebb)
+egy másik csatorna is jelzett az utóbbi 90 percben, az üzenet elején megjelenik:
+`🔁 Megerősítve: <csatorna> is jelezte (x perce) — …`. Ellenkező irány esetén: `↔️ Ellentmondás: …`.
+Ezt a `confirmed_by` / `contradicted_by` oszlop rögzíti, így később kiértékelhető, hogy a dupla jelzések jobban teljesítenek-e.
+
+Tét: az azonos tétű lépcsőfokok összevonva jelennek meg (pl. `1 E @2.06–1.80`); 10% feletti Pinnacle-árrésnél a tét max. 1 E.
