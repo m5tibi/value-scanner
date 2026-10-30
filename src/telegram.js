@@ -1,10 +1,9 @@
 // Telegram-értesítés (Bot API, sima fetch). Token nélkül konzolra ír.
 
 import { describeSelection } from './markets.js';
-import { sportHu, untilHu } from './format.js';
 
 const BOOK_NAMES = { onexbet: '1xBet', marathonbet: 'Marathon', pinnacle: 'Pinnacle' };
-export const bookName = (k) => BOOK_NAMES[k] ?? k;
+const bookName = (k) => BOOK_NAMES[k] ?? k;
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
 export function formatSignal(s) {
@@ -12,9 +11,9 @@ export function formatSignal(s) {
     timeZone: 'Europe/Budapest', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   });
   return [
-    `🎯 <b>Value (papír)</b> — ${esc(sportHu(s.sport_key))} · <code>${esc(s.sport_key)}</code>`,
-    `<code>${esc(s.home_team)}</code> – <code>${esc(s.away_team)}</code>`,
-    `🕒 ${start}${untilHu(s.minutes_to_start)}`,
+    `🎯 <b>Value (papír)</b> — ${esc(s.sport_key)}`,
+    `<b>${esc(s.home_team)} – ${esc(s.away_team)}</b>`,
+    `🕒 ${start} (${s.minutes_to_start} perc múlva)`,
     ``,
     `👉 <b>${esc(describeSelection({ market: s.market, name: s.outcome_name, point: s.point }, s))}</b>`,
     `${bookName(s.soft_book)}: <b>${s.soft_odds}</b>  |  fair: ${s.fair_odds}  |  előny: <b>${(s.edge * 100).toFixed(1)}%</b>`,

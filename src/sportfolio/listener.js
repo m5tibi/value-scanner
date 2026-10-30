@@ -14,8 +14,6 @@ import { NewMessage } from 'telegram/events/index.js';
 import { parseSignal } from './parse.js';
 import { analyzeSignal, formatAnalysis } from './analyze.js';
 import { makeNotifier } from '../telegram.js';
-import { makeFollowUp } from './followup.js';
-import { improvedHeader, formatLiveReminder } from '../alerts.js';
 
 // Sor végi "# megjegyzés" levágása (egyes .env-betöltők nem teszik meg).
 const env = Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, typeof v === 'string' ? v.replace(/\s+#.*$/, '').trim() : v]));
@@ -27,24 +25,9 @@ const opts = {
   minEdge: Number(env.SF_MIN_EDGE ?? 0.02),
   maxEdge: Number(env.SF_MAX_EDGE ?? 0.10),
   minMinutes: Number(env.SF_MIN_MINUTES ?? 5),
-  hugeEdge: Number(env.SF_HUGE_EDGE ?? 0.20),
-  hugeMaxUnits: Number(env.SF_HUGE_MAX_UNITS ?? 1),
-  // Tét egységben: 1 egység = a bankroll SF_UNIT_PCT %-a; tört Kelly, felső korláttal.
-  stake: {
-    kellyFraction: Number(env.SF_KELLY_FRACTION ?? 0.25),
-    maxUnits: Number(env.SF_MAX_UNITS ?? 3),
-    unitPct: Number(env.SF_UNIT_PCT ?? 1),
-  },
 };
 // mehet = csak a tiszta jelzések; ovatosan = + figyelmeztetésesek (alap); kihagy = minden
 const notifyLevel = LEVELS[env.SF_NOTIFY_LEVEL ?? 'ovatosan'] ?? 1;
-// Követő értesítések: 🔔 javult az odds (ismétlésnél) és ⏰ kezdési emlékeztető
-const followOpts = {
-  improveDelta: Number(env.SF_IMPROVE_DELTA ?? 0.02),
-  improveMax: Number(env.SF_IMPROVE_MAX ?? 2),
-  windowMin: Number(env.SF_LIVE_WINDOW_MIN ?? 20),
-};
-const liveReminder = env.SF_LIVE_REMINDER !== '0';
 
 function makeClient(session = env.TG_SESSION ?? '') {
   if (!env.TG_API_ID || !env.TG_API_HASH) {
@@ -52,8 +35,7 @@ function makeClient(session = env.TG_SESSION ?? '') {
     process.exit(1);
   }
   const client = new TelegramClient(new StringSession(session), Number(env.TG_API_ID), env.TG_API_HASH, {
-    connectionRetries: 5,
-    retryDelay: 3000,
+    connectionRetries: 10,
     autoReconnect: true,
   });
   client.setLogLevel('warn');
@@ -160,12 +142,6 @@ async function main() {
   const channelRawId = channel.entity?.id?.toString();
   const isOurChannel = (m) => m?.peerId?.channelId?.toString() === channelRawId;
 
-  const follow = makeFollowUp(followOpts);
-  if (db) {
-    try { follow.load(await db.sfPendingNotified(followOpts.windowMin)); }
-    catch (e) { log('Követési adatok betöltése sikertelen:', e.message); }
-  }
-
   client.addEventHandler(async (event) => {
     const m = event.message;
     if (!isOurChannel(m)) return;
@@ -175,56 +151,13 @@ async function main() {
       const { sig, a } = r;
       log(`${a.verdict.padEnd(8)} ${sig.home} – ${sig.away} | ${a.toBet} | küszöb ${a.threshold.toFixed(2)} | előny ${(a.edge * 100).toFixed(1)}%`);
       if (db) await db.insertSportfolio({ msgId: m.id, sig, a }).catch((e) => log('DB-hiba:', e.message));
-      if (LEVELS[a.verdict] > notifyLevel) return;
-      const d = follow.decide(sig, a);
-      if (d.action === 'repeat') { log('  ↳ ismétlés (nem javult eléggé), nem küldöm újra'); return; }
-      const text = formatAnalysis(sig, a);
-      await notify(d.action === 'improved' ? `${improvedHeader(d.prev, d.cur)}\n\n${text}` : text);
-      follow.record(sig, a, m.id, d.action);
-      if (db) await db.markSfNotified(m.id).catch((e) => log('DB-hiba:', e.message));
+      if (LEVELS[a.verdict] <= notifyLevel) await notify(formatAnalysis(sig, a));
     } catch (e) {
       log('Feldolgozási hiba:', e.message);
     }
   }, new NewMessage({}));
 
-  // ⏰ Kezdési emlékeztető: percenként megnézi, melyik kiküldött jelzés meccse kezdődött el.
-  if (liveReminder) {
-    setInterval(async () => {
-      const { due, expired } = follow.takeDue(new Date());
-      for (const m of due) {
-        try {
-          await notify(formatLiveReminder(m));
-          log(`⏰ Emlékeztető: ${m.home} – ${m.away}`);
-        } catch (e) { log('Emlékeztető-hiba:', e.message); }
-      }
-      const ids = [...due, ...expired].flatMap((m) => m.ids);
-      if (db && ids.length) await db.sfMarkReminded(ids).catch((e) => log('DB-hiba:', e.message));
-    }, 60_000);
-  }
-
   log(`Figyelés indul: "${channel.title}". Értesítés: ${viaBot ? 'bot' : 'Mentett üzenetek'}. Leállítás: Ctrl+C`);
-
-  // Őr (watchdog): ha a hálózat elmegy, a GramJS újracsatlakozása néha beragad.
-  // Percenként ellenőrizzük a kapcsolatot; ha 3 percig nincs rendben, kilépünk
-  // (1-es kóddal), és a start-figyelo.bat tiszta kapcsolattal újraindítja.
-  const WATCH_MS = 60_000, MAX_FAILS = 3;
-  let fails = 0;
-  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('időtúllépés')), ms))]);
-  setInterval(async () => {
-    try {
-      if (!client.connected) throw new Error('nincs kapcsolat');
-      await withTimeout(client.getMe(), 20_000);
-      if (fails) log('Kapcsolat helyreállt.');
-      fails = 0;
-    } catch (e) {
-      fails++;
-      log(`Kapcsolat-ellenőrzés sikertelen (${fails}/${MAX_FAILS}): ${e.message}`);
-      if (fails >= MAX_FAILS) {
-        log('A kapcsolat nem állt helyre – kilépés, újraindítás következik.');
-        process.exit(1);
-      }
-    }
-  }, WATCH_MS);
   const stop = async () => { log('Leállás...'); await client.disconnect(); if (db) await db.end(); process.exit(0); };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);

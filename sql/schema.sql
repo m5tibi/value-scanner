@@ -85,15 +85,3 @@ create table if not exists sportfolio_signals (
   profit        numeric
 );
 alter table sportfolio_signals enable row level security;
-
--- Előny-kategória (normal | nagy_elony | nagyon_nagy_elony) a későbbi kiértékeléshez
-alter table sportfolio_signals add column if not exists category text;
-
--- Követő értesítések: "javult az odds" és kezdési emlékeztető
-alter table value_signals add column if not exists notified_odds    numeric;
-alter table value_signals add column if not exists notified_edge    numeric;
-alter table value_signals add column if not exists notified_book    text;
-alter table value_signals add column if not exists improved_count   int not null default 0;
-alter table value_signals add column if not exists live_reminded_at timestamptz;
-alter table sportfolio_signals add column if not exists notified_at      timestamptz;
-alter table sportfolio_signals add column if not exists live_reminded_at timestamptz;

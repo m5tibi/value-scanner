@@ -20,8 +20,8 @@ export function makeDb(databaseUrl) {
     async insertSignal(s) {
       const cols = ['event_id', 'sport_key', 'home_team', 'away_team', 'commence_time', 'market', 'group_key',
         'outcome_name', 'point', 'soft_book', 'soft_odds', 'pin_odds', 'pin_margin', 'fair_prob', 'fair_odds',
-        'edge', 'min_odds', 'detected_at', 'notified_odds', 'notified_edge', 'notified_book'];
-      const vals = cols.map((c) => ({ notified_odds: s.soft_odds, notified_edge: s.edge, notified_book: s.soft_book }[c] ?? s[c]));
+        'edge', 'min_odds', 'detected_at'];
+      const vals = cols.map((c) => s[c]);
       const ph = cols.map((_, i) => `$${i + 1}`).join(',');
       const r = await pool.query(
         `insert into value_signals (${cols.join(',')}) values (${ph})
@@ -40,56 +40,6 @@ export function makeDb(databaseUrl) {
               and commence_time > $7`,
           [snap.event_id, snap.market, snap.group_key, o.name, o.pin_odds, o.fair_prob, snap.seen_at]);
       }
-    },
-
-    /** A már kiküldött jelzés utoljára értesített ára/előnye (a "javult az odds" döntéshez). */
-    async getNotified(s) {
-      const r = await pool.query(
-        `select id, notified_odds, notified_edge, notified_book, improved_count from value_signals
-          where event_id = $1 and market = $2 and group_key = $3 and outcome_name = $4`,
-        [s.event_id, s.market, s.group_key, s.outcome_name]);
-      const x = r.rows[0];
-      return x && { id: x.id, odds: x.notified_odds == null ? null : Number(x.notified_odds),
-        edge: x.notified_edge == null ? null : Number(x.notified_edge), book: x.notified_book, count: x.improved_count };
-    },
-
-    async markImproved(id, s) {
-      await pool.query(
-        `update value_signals set notified_odds = $2, notified_edge = $3, notified_book = $4,
-                improved_count = improved_count + 1 where id = $1`, [id, s.soft_odds, s.edge, s.soft_book]);
-    },
-
-    /** Kezdési emlékeztetőre váró jelzések (kezdés elmúlt, legfeljebb windowMin perce). */
-    async dueLiveReminders(windowMin = 20) {
-      const r = await pool.query(
-        `select * from value_signals
-          where live_reminded_at is null and commence_time <= now()
-            and commence_time > now() - ($1 || ' minutes')::interval
-          order by commence_time, id`, [windowMin]);
-      return r.rows;
-    },
-
-    async markLiveReminded(ids) {
-      if (ids.length) await pool.query(`update value_signals set live_reminded_at = now() where id = any($1)`, [ids]);
-    },
-
-    /** Sportfolio: kiküldöttnek jelöl. */
-    async markSfNotified(msgId) {
-      await pool.query(`update sportfolio_signals set notified_at = now() where msg_id = $1`, [msgId]);
-    },
-
-    /** Sportfolio: a még nem emlékeztetett, kiküldött jelzések (újraindításkor visszatöltéshez). */
-    async sfPendingNotified(windowMin = 20) {
-      const r = await pool.query(
-        `select * from sportfolio_signals
-          where notified_at is not null and live_reminded_at is null
-            and start_at > now() - ($1 || ' minutes')::interval
-          order by posted_at`, [windowMin]);
-      return r.rows;
-    },
-
-    async sfMarkReminded(msgIds) {
-      if (msgIds.length) await pool.query(`update sportfolio_signals set live_reminded_at = now() where msg_id = any($1)`, [msgIds]);
     },
 
     async openSportsToSettle() {
@@ -140,12 +90,12 @@ export function makeDb(databaseUrl) {
         `insert into sportfolio_signals
            (msg_id, posted_at, sport, league, home, away, period, start_at,
             value_book, value_market, value_odds, ref_book, ref_market, ref_odds,
-            to_bet, same_market, threshold, edge, verdict, warnings, category)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+            to_bet, same_market, threshold, edge, verdict, warnings)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
          on conflict (msg_id) do nothing`,
         [msgId, sig.postedAt, sig.sport, sig.league, sig.home, sig.away, sig.period, sig.startAt,
           sig.value.book, sig.value.market, sig.value.odds, sig.ref.book, sig.ref.market, sig.ref.odds,
-          a.toBet, a.sameMarket, a.threshold, a.edge, a.verdict, a.warnings, a.category ?? null]);
+          a.toBet, a.sameMarket, a.threshold, a.edge, a.verdict, a.warnings]);
     },
 
     async getState(key) {

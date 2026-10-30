@@ -9,10 +9,8 @@ import { loadConfig } from './config.js';
 import { OddsApi } from './oddsApi.js';
 import { scanEvents } from './scanner.js';
 import { settleSignal, parseScores } from './settle.js';
-import { makeNotifier, formatSignal, bookName } from './telegram.js';
-import { describeSelection } from './markets.js';
+import { makeNotifier, formatSignal } from './telegram.js';
 import { makeDb } from './db.js';
-import { isImprovement, improvedHeader, formatLiveReminder, groupByMatch } from './alerts.js';
 
 const cfg = loadConfig();
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -36,7 +34,6 @@ async function loadBudget(db) {
 async function scanOnce({ api, db, notify, budget }) {
   const books = [cfg.sharpBook, ...cfg.softBooks];
   let newSignals = 0;
-  let improved = 0;
   const rejectedTotal = {};
   const st = { events: 0, withSharp: 0, compared: 0, positive: 0, best: null };
 
@@ -69,21 +66,11 @@ async function scanOnce({ api, db, notify, budget }) {
       if (await db.insertSignal(s)) {
         newSignals++;
         await notify(formatSignal(s));
-        continue;
-      }
-      // Már kiküldtük: csak akkor szólunk újra, ha jobb az odds ÉS a friss Pinnacle-ből számolt előny is nőtt.
-      const prev = await db.getNotified(s);
-      const cur = { odds: s.soft_odds, edge: s.edge, book: s.soft_book };
-      if (isImprovement(prev, cur, { minDelta: cfg.improveMinDelta, maxCount: cfg.improveMax })) {
-        const nice = (x) => ({ ...x, book: bookName(x.book) });
-        await notify(`${improvedHeader(nice(prev), nice(cur))}\n\n${formatSignal(s)}`);
-        await db.markImproved(prev.id, s);
-        improved++;
       }
     }
   }
   const b = budget && cfg.dailyCreditBudget ? ` Ma: ${budget.used}/${cfg.dailyCreditBudget}.` : '';
-  log(`Szkennelés kész: ${newSignals} új jelzés, ${improved} javulás. Kvóta maradt: ${api.remaining ?? '?'}.${b} Kiszűrve:`, rejectedTotal);
+  log(`Szkennelés kész: ${newSignals} új jelzés. Kvóta maradt: ${api.remaining ?? '?'}.${b} Kiszűrve:`, rejectedTotal);
   if (st.events) {
     const best = st.best
       ? ` Legjobb: ${(st.best.edge * 100).toFixed(1)}% (${st.best.sport}: ${st.best.label} @ ${st.best.book} ${st.best.price}, fair ${st.best.fair_odds.toFixed(2)})`
@@ -137,27 +124,10 @@ async function reportOnce({ db, notify }, days = 30) {
   await notify(lines.join('\n'));
 }
 
-/** ⏰ Kezdési emlékeztető: a kiküldött jelzésekről, meccsenként egy üzenet. Nem kér le semmit az API-ból. */
-async function liveRemindersOnce({ db, notify }) {
-  const rows = await db.dueLiveReminders(cfg.liveReminderWindowMin);
-  const matches = groupByMatch(rows, (r) => r.event_id,
-    (r) => ({ home: r.home_team, away: r.away_team, sport: r.sport_key, league: r.sport_key, startAt: r.commence_time }),
-    (r) => ({
-      toBet: describeSelection({ market: r.market, name: r.outcome_name, point: r.point == null ? undefined : Number(r.point) }, r),
-      book: bookName(r.notified_book ?? r.soft_book), odds: Number(r.notified_odds ?? r.soft_odds), threshold: r.min_odds,
-    }));
-  for (const m of matches) {
-    await notify(formatLiveReminder(m));
-    await db.markLiveReminded(m.ids);
-  }
-  if (matches.length) log(`Kezdési emlékeztető: ${matches.length} meccs.`);
-}
-
 /** Egy kör: mindig szkennel; elszámol, ha letelt SETTLE_INTERVAL_MIN; riportot küld naponta egyszer 9:00 után. */
 async function tick({ api, db, notify }) {
   const budget = await loadBudget(db);
   await scanOnce({ api, db, notify, budget }).catch((e) => log('Szkennelési hiba:', e.message));
-  if (cfg.liveReminder) await liveRemindersOnce({ db, notify }).catch((e) => log('Emlékeztető-hiba:', e.message));
 
   const lastSettle = Number(await db.getState('last_settle_ms')) || 0;
   if (Date.now() - lastSettle > cfg.settleIntervalMin * 60e3) {
