@@ -145,11 +145,3 @@ Logok: `pm2 logs sportfolio`, leállítás: `pm2 stop sportfolio`.
 A korábbi csatorna-exporton (2817 jelzés) tesztelve: kb. 21% ✅, 37% ⚠️, 42% ⛔.
 
 A naplózott jelzéseknél a `my_odds`, `my_stake`, `result`, `profit` oszlopokba beírhatod a saját fogadásaidat, így később összevethető, hol volt valódi value.
-
-## Követő értesítések (v0.6)
-
-- **🔔 Javult az odds** – ha egy már kiküldött jelzésnél (kezdés előtt) jobb árat talál, és a *friss* Pinnacle-ből számolt előny
-  legalább 2 százalékponttal nőtt, újra szól. Ha a Pinnacle is mozdult (vagyis az esély romlott), nem szól. Kimenetelenként max. 2×.
-  A Sportfolio-figyelő ugyanígy: az ugyanarra a kimenetelre érkező ismétléseket csak javulásnál küldi tovább.
-- **⏰ Elkezdődött – nézz rá élőben** – kezdéskor meccsenként egy emlékeztető a kiküldött jelzésekről. Nem kér le adatot, ingyenes.
-  Kikapcsolás: `LIVE_REMINDER=0` (szkenner), `SF_LIVE_REMINDER=0` (figyelő).
