@@ -85,3 +85,56 @@ create table if not exists sportfolio_signals (
   profit        numeric
 );
 alter table sportfolio_signals enable row level security;
+
+-- Előny-kategória (normal | nagy_elony | nagyon_nagy_elony) a későbbi kiértékeléshez
+alter table sportfolio_signals add column if not exists category text;
+
+-- Követő értesítések: "javult az odds" és kezdési emlékeztető
+alter table value_signals add column if not exists notified_odds    numeric;
+alter table value_signals add column if not exists notified_edge    numeric;
+alter table value_signals add column if not exists notified_book    text;
+alter table value_signals add column if not exists improved_count   int not null default 0;
+alter table value_signals add column if not exists live_reminded_at timestamptz;
+alter table sportfolio_signals add column if not exists notified_at      timestamptz;
+alter table sportfolio_signals add column if not exists live_reminded_at timestamptz;
+
+-- "Tippmix Value" / "TPro Value" csatornák jelzései (OddsHub-formátum)
+create table if not exists oddshub_signals (
+  channel_id    text not null,
+  msg_id        bigint not null,
+  channel       text,
+  posted_at     timestamptz not null,
+  sport         text,
+  league        text,
+  home          text,
+  away          text,
+  start_at      timestamptz,
+  market        text,          -- ml | totals | spread
+  pin_line      numeric,
+  alt_line      boolean,
+  pin_odds      numeric[],
+  pin_prev      numeric[],
+  soft_book     text,
+  soft_line     numeric,
+  soft_odds     numeric[],
+  pick          int,
+  to_bet        text,
+  value_odds    numeric,
+  fair_odds     numeric,
+  threshold     numeric,
+  min_odds      numeric,
+  edge          numeric,
+  estimated     boolean,
+  their_ev      numeric,
+  their_stake   numeric,
+  verdict       text,
+  warnings      text[],
+  notified_at      timestamptz,
+  live_reminded_at timestamptz,
+  my_odds       numeric,
+  my_stake      numeric,
+  result        text,
+  profit        numeric,
+  primary key (channel_id, msg_id)
+);
+alter table oddshub_signals enable row level security;

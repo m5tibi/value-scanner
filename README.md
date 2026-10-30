@@ -145,3 +145,21 @@ Logok: `pm2 logs sportfolio`, leállítás: `pm2 stop sportfolio`.
 A korábbi csatorna-exporton (2817 jelzés) tesztelve: kb. 21% ✅, 37% ⚠️, 42% ⛔.
 
 A naplózott jelzéseknél a `my_odds`, `my_stake`, `result`, `profit` oszlopokba beírhatod a saját fogadásaidat, így később összevethető, hol volt valódi value.
+
+## Követő értesítés (v0.6)
+
+- **🔔 Javult az odds** – ha egy már kiküldött jelzésnél (kezdés előtt) jobb árat talál, és a *friss* Pinnacle-ből számolt előny
+  legalább 2 százalékponttal nőtt, újra szól. Ha a Pinnacle is mozdult (vagyis az esély romlott), nem szól. Kimenetelenként max. 2×.
+  A Sportfolio-figyelő ugyanígy: az ugyanarra a kimenetelre érkező ismétléseket csak javulásnál küldi tovább.
+
+## Tippmix Value / TPro Value csatornák (v0.7)
+
+A figyelő több csatornát is olvas (`SPORTFOLIO_CHANNELS`, vesszővel; a régi `SPORTFOLIO_CHANNEL` is működik),
+és magától felismeri az üzenet formátumát:
+
+- **Surebet** (Value NonStop): mint eddig.
+- **OddsHub** („New odds update on Pinnacle”): a kiemelt odds (vagy a Pinnacle-nél ⬇️ oldal) a megteendő.
+  A bot árrés nélküli fair oddsot, konzervatív küszöböt („Biztos”) és minimumot számol, negyed-Kelly tétet ad,
+  és megmondja, hol keresd a TippmixPro-n (pl. »Ki nyeri? – Teljes esemény«).
+  Eltérő vonalnál („EV: None”) becsül: gólos sportoknál Poisson, kosárnál/kézinél normális eloszlás; ezt jelöli, és a tétet 1 E-re korlátozza.
+- Naplózás: `oddshub_signals` tábla. A 🔔 javulás ezekre is működik.

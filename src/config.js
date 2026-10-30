@@ -31,5 +31,9 @@ export function loadConfig(rawEnv = process.env) {
     minQuotaRemaining: num(env.MIN_QUOTA_REMAINING, 200),
     // Napi kreditkeret (budapesti nap szerint). 0 = nincs korlát.
     dailyCreditBudget: num(env.DAILY_CREDIT_BUDGET, 0),
+
+    // Követő értesítések
+    improveMinDelta: num(env.IMPROVE_MIN_DELTA, 0.02),   // ennyivel nagyobb előny kell a 🔔-hoz
+    improveMax: num(env.IMPROVE_MAX, 2),                // kimenetelenként legfeljebb ennyi 🔔
   };
 }

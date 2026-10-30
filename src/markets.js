@@ -56,6 +56,9 @@ export function describeSelection({ market, name, point }, event) {
     return `${name} győzelem${event?.sport_key?.startsWith('soccer') ? ' (1X2)' : ''}`;
   }
   if (market === 'totals') return `${name === 'Over' ? 'Több mint' : 'Kevesebb mint'} ${point} (összesen)`;
-  if (market === 'spreads') return `${name} ${point > 0 ? '+' : ''}${point} (hendikep)`;
+  if (market === 'spreads') {
+    if (Number(point) === 0) return `${name} ázsiai hendikep 0 (döntetlennél visszajár)`;
+    return `${name} ${point > 0 ? '+' : ''}${point} (ázsiai hendikep)`;
+  }
   return `${market} ${name} ${point ?? ''}`.trim();
 }

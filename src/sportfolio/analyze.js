@@ -1,3 +1,5 @@
+import { sportHu, untilHu, durationHu } from '../format.js';
+
 // Sportfolio-jelzés kiértékelése: mit kell megtenni, mi a küszöb-odds, és milyen csapdák vannak benne.
 
 /** Piac-kód értelmezése, pl. "AH1(-8.5)", "TO(3.0) for Team1", "Team2 Win", "X2", "AH1(-1.5) - Sets". */
@@ -90,7 +92,33 @@ export function describe(mk, home, away) {
  * @param sig  parseSignal() eredménye
  * @param opts { minEdge, maxEdge, minMinutes, now }
  */
-export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes = 5, now = new Date() } = {}) {
+/**
+ * Javasolt tét egységben (1 egység = a bankroll unitPct %-a), tört Kelly alapján, felső korláttal.
+ * p = a megteendő oldal fair valószínűsége, odds = a saját irodád oddsa.
+ * 0,25 egységre lefelé kerekítve; ha nincs előny, 0.
+ */
+export function stakeUnits(p, odds, { kellyFraction = 0.25, maxUnits = 3, unitPct = 1 } = {}) {
+  if (!(odds > 1) || !(p > 0 && p < 1)) return 0;
+  const kelly = (p * odds - 1) / (odds - 1); // a bankroll ekkora része a teljes Kelly
+  if (kelly <= 0) return 0;
+  const units = (kelly * kellyFraction * 100) / unitPct;
+  return Math.min(maxUnits, Math.floor(units * 4) / 4);
+}
+
+/** Tét-lépcső: néhány oddsszinten (a jelzés oddsától lefelé) mennyi a javasolt tét. */
+export function stakeLadder(p, signalOdds, thresholdRaw, stakeOpts) {
+  const levels = new Set([signalOdds]);
+  for (const f of [1.06, 1.03]) {
+    const o = Math.ceil(thresholdRaw * f * 100) / 100;
+    if (o < signalOdds) levels.add(o);
+  }
+  return [...levels]
+    .sort((a, b) => b - a)
+    .map((odds) => ({ odds, units: stakeUnits(p, odds, stakeOpts) }))
+    .filter((x) => x.units > 0);
+}
+
+export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, hugeEdge = 0.20, hugeMaxUnits = 1, minMinutes = 5, now = new Date(), stake: stakeOpts } = {}) {
   const valueMk = classifyMarket(sig.value.market);
   const refMk = classifyMarket(sig.ref.market);
   const sameMarket = isComplementary(valueMk, refMk);
@@ -102,24 +130,39 @@ export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes 
 
   const warnings = [];
   if (!sameMarket) warnings.push('A két láb NEM ugyanaz a piac (pl. eltérő döntetlen-kezelés vagy vonal) – a küszöb nem megbízható.');
-  if (edge > maxEdge) warnings.push(`Gyanúsan nagy előny (${(edge * 100).toFixed(0)}%) – valószínűleg elavult vagy hibás odds, az iroda érvénytelenítheti.`);
+  // Előny-kategória: normál / nagy (10–20%) / nagyon nagy (20% felett)
+  const category = edge > hugeEdge ? 'nagyon_nagy_elony' : edge > maxEdge ? 'nagy_elony' : 'normal';
+  if (category === 'nagyon_nagy_elony') {
+    warnings.push(`Nagyon nagy eltérés (${(edge * 100).toFixed(0)}%) – csak ha nálad is ≥ küszöb. Az iroda érvénytelenítheti vagy hamarabb limitálhat; tét max. ${String(hugeMaxUnits).replace('.', ',')} E.`);
+  } else if (category === 'nagy_elony') {
+    warnings.push(`Gyanúsan nagy előny (${(edge * 100).toFixed(0)}%) – a jelzés oddsa valószínűleg elavult, nézd meg a saját irodádat.`);
+  }
   if (minutesToStart !== null && minutesToStart < 0) warnings.push('A meccs már elkezdődött – a jelzés élő oddsra vonatkozhat.');
-  else if (minutesToStart !== null && minutesToStart < minMinutes) warnings.push(`Kezdésig csak ${minutesToStart} perc.`);
+  else if (minutesToStart !== null && minutesToStart < minMinutes) warnings.push(`Kezdésig csak ${durationHu(minutesToStart)}.`);
   if (edge < minEdge) warnings.push(`Kicsi az előny már a jelzésben is (${(edge * 100).toFixed(1)}%).`);
   if (valueMk.type === 'EH') warnings.push('Európai (háromesélyes) hendikep – ne keverd össze az ázsiaival.');
   if (valueMk.type === 'UNKNOWN') warnings.push(`Ismeretlen piackód: ${sig.value.market}`);
 
   let verdict;
-  if (!sameMarket || edge > 0.20 || (minutesToStart !== null && minutesToStart < 0)) verdict = 'kihagy';
+  // Csak az eltérő piac és a már elkezdett meccs kihagyandó; a nagy előnyt a saját oddsod küszöb-ellenőrzése szűri.
+  if (!sameMarket || (minutesToStart !== null && minutesToStart < 0)) verdict = 'kihagy';
   else if (warnings.length) verdict = 'ovatosan';
   else verdict = 'mehet';
 
+  const p = 1 / threshold; // konzervatív fair valószínűség
+  const effStake = category === 'nagyon_nagy_elony'
+    ? { ...stakeOpts, maxUnits: Math.min(stakeOpts?.maxUnits ?? 3, hugeMaxUnits) }
+    : stakeOpts;
+  const stakes = verdict === 'kihagy' || valueMk.type === 'UNKNOWN' ? [] : stakeLadder(p, sig.value.odds, threshold, effStake);
+
   return {
     toBet: describe(valueMk, sig.home, sig.away),
+    stakes,
     valueMarket: valueMk,
     sameMarket,
     threshold: Math.ceil(threshold * 100) / 100, // felfelé kerekítve, hogy biztosan meglegyen
     edge,
+    category,
     minutesToStart,
     warnings,
     verdict,
@@ -127,6 +170,7 @@ export function analyzeSignal(sig, { minEdge = 0.02, maxEdge = 0.10, minMinutes 
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const fmtU = (u) => String(u).replace('.', ',');
 const ICON = { mehet: '✅', ovatosan: '⚠️', kihagy: '⛔' };
 const TEXT = { mehet: 'Mehet, ha megvan a küszöb', ovatosan: 'Óvatosan', kihagy: 'Inkább hagyd ki' };
 
@@ -134,15 +178,19 @@ export function formatAnalysis(sig, a) {
   const start = sig.startAt
     ? sig.startAt.toLocaleString('hu-HU', { timeZone: 'Europe/Budapest', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
     : '?';
-  const when = a.minutesToStart === null ? '' : a.minutesToStart >= 0 ? ` (${a.minutesToStart} perc múlva)` : ' (már megy)';
+  const when = untilHu(a.minutesToStart);
   return [
     `${ICON[a.verdict]} <b>${TEXT[a.verdict]}</b>`,
-    `<b>${esc(sig.home)} – ${esc(sig.away)}</b>`,
-    `${esc(sig.sport)} · ${esc(sig.league)}`,
+    // <code> = koppintásra vágólapra kerül a Telegramban (a csapatnevek külön-külön, és a liga is)
+    `<code>${esc(sig.home)}</code> – <code>${esc(sig.away)}</code>`,
+    `${esc(sportHu(sig.sport))} · <code>${esc(sig.league)}</code>`,
     `🕒 ${start}${when} · ${esc(periodHu(sig.period))}`,
     ``,
     `👉 <b>${esc(a.toBet)}</b>`,
     `Csak ha az odds <b>≥ ${a.threshold.toFixed(2)}</b>`,
+    ...(a.stakes?.length
+      ? [`💰 Tét: ${a.stakes.map((s, i) => (i === 0 ? `<b>${fmtU(s.units)} E</b> @${s.odds.toFixed(2)}` : `${fmtU(s.units)} E @${s.odds.toFixed(2)}`)).join(' · ')}`]
+      : []),
     `Jelzésben: ${esc(sig.value.book)} ${sig.value.odds} · előny ${(a.edge * 100).toFixed(1)}%`,
     `Referencia: ${esc(sig.ref.book)} ${esc(sig.ref.market)} @ ${sig.ref.odds}`,
     ...(a.warnings.length ? ['', ...a.warnings.map((w) => `⚠️ ${esc(w)}`)] : []),
