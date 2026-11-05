@@ -68,7 +68,41 @@ export function pinnapiPrices(event, sig) {
   return h ? [h.home, h.away] : null;
 }
 
+/** Egy ár keresése a pinnapi-esemény összes vonalában (bármely periódus, piac). [ár] vagy null. */
+export function pinnapiFind(event, target, tol = 0.02) {
+  if (!event?.periods || target == null) return null;
+  const nums = [];
+  const walk = (o) => {
+    if (o == null) return;
+    if (typeof o === 'number') { nums.push(o); return; }
+    if (typeof o === 'object') for (const [k, v] of Object.entries(o)) if (!['hdp', 'points', 'max', 'line_id', 'number'].includes(k)) walk(v);
+  };
+  walk(event.periods);
+  const hit = nums.filter((n) => n > 1 && near(n, target, tol)).sort((a, b) => Math.abs(a - target) - Math.abs(b - target))[0];
+  return hit ? [hit] : null;
+}
+
 // ---------------- OddsPapi ----------------
+
+/** /v4/bookmakers -> [{ slug, name }] */
+export function bookList(json) {
+  const src = Array.isArray(json?.data) ? json.data : json;
+  if (Array.isArray(src)) return src.map((b) => (typeof b === 'string' ? { slug: b, name: b } : { slug: b.slug, name: b.bookmakerName ?? b.name ?? b.slug })).filter((x) => x.slug);
+  if (src && typeof src === 'object') return Object.entries(src).map(([k, v]) => ({ slug: v?.slug ?? k, name: v?.bookmakerName ?? v?.name ?? k }));
+  return [];
+}
+
+/** A jelzésben szereplő irodanév ("1xbet", "Winlinebet", "Bet365") -> OddsPapi-slug, vagy null. */
+export function findSlug(books, name) {
+  const n = (x) => String(x ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const want = n(name);
+  if (!want || want === 'avgline') return null;
+  const exact = books.find((b) => n(b.slug) === want || n(b.name) === want);
+  if (exact) return exact.slug;
+  const loose = books.filter((b) => (n(b.slug).length >= 4 && (want.startsWith(n(b.slug)) || n(b.slug).startsWith(want)))
+    || (n(b.name).length >= 4 && (want.startsWith(n(b.name)) || n(b.name).startsWith(want))));
+  return loose.sort((a, b) => n(b.slug).length - n(a.slug).length)[0]?.slug ?? null;
+}
 
 /** OddsPapi sportId keresése a /v4/sports listában név alapján. */
 export function oddspapiSportId(sports, sport) {

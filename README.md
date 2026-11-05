@@ -179,5 +179,7 @@ Ha a figyelő környezetében meg van adva `PINNAPI_KEY` és/vagy `ODDSPAPI_KEY`
 megkeresi ugyanazt a meccset az adott API-ban, összeveti a Pinnacle- (és OddsPapi-nál a TippmixPro-) oddsot a jelzéssel,
 és elmenti a `probe_results` táblába. A jelzés kiküldését nem lassítja.
 
-- Napi limit (az ingyenes keretek védelmére): `PROBE_PINNAPI_DAILY` (alap 30 jelzés), `PROBE_ODDSPAPI_DAILY` (alap 6). Kikapcsolás: `PROBE=0`.
+- A Value NonStop-jelzéseknél is fut: ott a jelzés soft irodáját (1xBet, Winline stb.) és árát is keresi az OddsPapi-ban.
+- Napi limit jelzésszámban (az ingyenes keretek védelmére): `PROBE_PINNAPI_OH_DAILY` (20), `PROBE_PINNAPI_SF_DAILY` (10),
+  `PROBE_ODDSPAPI_OH_DAILY` (2), `PROBE_ODDSPAPI_SF_DAILY` (4). A „kihagy” jelzéseket nem vizsgálja. Kikapcsolás: `PROBE=0`.
 - Összesítés: `npm run probe:report` (csak az adatbázist olvassa, a saját gépen is futtatható).

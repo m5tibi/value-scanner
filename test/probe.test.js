@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  pinnapiFind, bookList, findSlug,
   pinnapiSportId, pinnapiEvents, findPinnapiEvent, pinnapiPrices,
   oddspapiSportId, tippmixSlugs, findOddspapiFixture, oddspapiPrices, matchPrice,
 } from '../src/probe/providers.js';
-import { makeProbe } from '../src/probe/probe.js';
+import { makeProbe, fromSurebet } from '../src/probe/probe.js';
+import { parseSignal } from '../src/sportfolio/parse.js';
 import { parseOddsHub, analyzeOddsHub } from '../src/sportfolio/oddshub.js';
 
 const ROKI = `New odds update on **Pinnacle**
@@ -32,7 +34,7 @@ const PIN_LINES = { events: [{ event_id: 222, periods: { num_0: {
 } } }] };
 
 const OP_SPORTS = [{ sportId: 10, sportName: 'Soccer' }, { sportId: 15, sportName: 'Ice Hockey', slug: 'ice-hockey' }, { sportId: 11, sportName: 'Basketball' }];
-const OP_BOOKS = [{ slug: 'pinnacle' }, { slug: 'bet365' }, { slug: 'tippmixpro' }];
+const OP_BOOKS = [{ slug: 'pinnacle', bookmakerName: 'Pinnacle' }, { slug: 'bet365', bookmakerName: 'Bet365' }, { slug: 'tippmixpro', bookmakerName: 'TippmixPro' }, { slug: '1xbet', bookmakerName: '1xBet' }, { slug: 'vegashu', bookmakerName: 'Vegas.hu' }];
 const OP_FIXTURES = [{ fixtureId: 'id1', participant1Name: 'Kiekko-Vantaa', participant2Name: 'RoKi Rovaniemi', startTime: '2026-10-30T16:30:00.000Z', tournamentName: 'Mestis' }];
 const OP_ODDS = { fixtureId: 'id1', bookmakerOdds: {
   pinnacle: { markets: { 15101: { bookmakerMarketId: 'moneyline', outcomes: { 1: { players: { 0: { price: 1.833, bookmakerOutcomeId: 'home', active: true } } }, 2: { players: { 0: { price: 1.909, bookmakerOutcomeId: 'away', active: true } } } } } } },
@@ -84,7 +86,7 @@ test('teljes folyamat álválaszokkal: mindkét szolgáltató, napi limit, DB-me
     return new Response(JSON.stringify(body), { status: 200 });
   };
   const logs = [];
-  const probe = makeProbe({ env: { PINNAPI_KEY: 'p', ODDSPAPI_KEY: 'o', PROBE_PINNAPI_DAILY: '1', PROBE_ODDSPAPI_DAILY: '1' }, db, log: (...x) => logs.push(x.join(' ')), fetchImpl });
+  const probe = makeProbe({ env: { PINNAPI_KEY: 'p', ODDSPAPI_KEY: 'o', PROBE_PINNAPI_OH_DAILY: '1', PROBE_ODDSPAPI_OH_DAILY: '1' }, db, log: (...x) => logs.push(x.join(' ')), fetchImpl });
   // a szüneteket (sleep) itt nem várjuk ki: setTimeout gyorsítása
   const st = globalThis.setTimeout;
   globalThis.setTimeout = (fn, ms, ...r) => st(fn, Math.min(ms, 1), ...r);
@@ -114,4 +116,64 @@ test('Tippmix-slug a /bookmakers válasz többféle alakjából', () => {
   assert.deepEqual(tippmixSlugs({ data: [{ slug: 'tmp', bookmakerName: 'Tippmix Pro' }] }), ['tmp']);
   assert.deepEqual(tippmixSlugs(['pinnacle', 'tippmix']), ['tippmix']);
   assert.deepEqual(tippmixSlugs([{ slug: 'bet365' }]), []);
+});
+
+test('irodanév -> OddsPapi-slug, ár keresése a pinnapi-eseményben', () => {
+  const books = bookList(OP_BOOKS);
+  assert.equal(findSlug(books, '1xbet'), '1xbet');
+  assert.equal(findSlug(books, 'Bet365'), 'bet365');
+  assert.equal(findSlug(books, 'Vegas.hu'), 'vegashu');
+  assert.equal(findSlug(books, 'Avgline'), null);
+  assert.equal(findSlug(books, 'Winlinebet'), null);
+  assert.deepEqual(pinnapiFind(pinnapiEvents(PIN_LINES)[0], 1.5), [1.5]);   // a hendikep away-ára
+  assert.equal(pinnapiFind(pinnapiEvents(PIN_LINES)[0], 5.5), null);        // a vonal értékét (points) nem tekinti árnak
+});
+
+test('Value NonStop-jelzés a tesztben: soft iroda (1xBet) és Pinnacle-ár keresése', async () => {
+  const NONSTOP = `💰 New surebet found!
+Profit: 4.15%
+Sport: Hockey
+League: Finland. Mestis
+Event: Kiekko-Vantaa - RoKi [Full time with overtimes]
+Start at : 30 Oct 16:30 UTC
+
+1xbet:
+▫️AH2(+1.5) → 1.5
+▫️Stake: 43.4 $ Place Bet
+Pinnacle:
+▫️AH1(-1.5) → 2.6
+▫️Stake: 56.6 $ Place Bet`;
+  const sf = parseSignal(NONSTOP, now);
+  const { sig: ps, a: pa } = fromSurebet(sf);
+  assert.equal(ps.kind, 'sf');
+  assert.deepEqual(ps.pin, [{ odds: 2.6 }]);
+  assert.equal(pa.softOdds, 1.5);
+
+  const OP_ODDS_SF = { bookmakerOdds: {
+    pinnacle: { markets: { 1: { outcomes: { 1: { players: { 0: { price: 2.6, active: true } } } } } } },
+    '1xbet': { markets: { 1: { outcomes: { 1: { players: { 0: { price: 1.5, active: true } } } } } } },
+  } };
+  const saved = [], urls = [];
+  const db = { getState: async () => null, setState: async () => {}, insertProbe: async (x) => { saved.push(x); } };
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    const u = new URL(url);
+    const body = u.host === 'pinnapi.com' ? (u.pathname.endsWith('/fixtures') ? PIN_FIXTURES : PIN_LINES)
+      : u.pathname.endsWith('/sports') ? OP_SPORTS : u.pathname.endsWith('/bookmakers') ? OP_BOOKS
+      : u.pathname.endsWith('/fixtures') ? OP_FIXTURES : OP_ODDS_SF;
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  const logs = [];
+  const probe = makeProbe({ env: { PINNAPI_KEY: 'p', ODDSPAPI_KEY: 'o' }, db, log: (...x) => logs.push(x.join(' ')), fetchImpl });
+  const st = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms, ...r) => st(fn, Math.min(ms, 1), ...r);
+  try { probe.enqueue(sf, {}, { channelId: 'c', msgId: 9 }, 'sf'); await new Promise((r) => st(r, 200)); }
+  finally { globalThis.setTimeout = st; }
+
+  const pin = saved.find((x) => x.provider === 'pinnapi');
+  const op = saved.find((x) => x.provider === 'oddspapi');
+  assert.ok(pin.found && pin.pinMatch);              // 2.6 megvan a pinnapi-eseményben (hendikep)
+  assert.ok(op.softFound && op.softMatch);           // 1xBet 1.5 megvan az OddsPapi-ban
+  assert.ok(urls.some((u) => u.includes('bookmakers=pinnacle,1xbet')));
+  assert.ok(logs.some((l) => /magyar irodák: .*Vegas\.hu/.test(l)));
 });

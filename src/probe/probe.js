@@ -2,12 +2,30 @@
 // a pinnapi-ban és az OddsPapi-ban, összeveti az oddsokat, és elmenti a probe_results táblába.
 // Az ingyenes kereteket napi limit védi; a lekérések sorban, szünettel mennek; a jelzés kiküldését nem lassítja.
 //
-// Beállítások (env): PINNAPI_KEY, ODDSPAPI_KEY, PROBE_PINNAPI_DAILY (alap 30), PROBE_ODDSPAPI_DAILY (alap 6), PROBE=0 (kikapcsolás)
+// Jelzés-fajták: 'oh' = TPro/Tippmix Value (OddsHub), 'sf' = Value NonStop (surebet: soft iroda + Pinnacle/BetinAsia).
+// Beállítások (env): PINNAPI_KEY, ODDSPAPI_KEY, PROBE=0 (kikapcsolás), napi limitek jelzésszámban:
+//   PROBE_PINNAPI_OH_DAILY (20), PROBE_PINNAPI_SF_DAILY (10), PROBE_ODDSPAPI_OH_DAILY (2), PROBE_ODDSPAPI_SF_DAILY (4)
 
 import {
-  getJson, pinnapiSportId, pinnapiEvents, findPinnapiEvent, pinnapiPrices,
-  oddspapiSportId, tippmixSlugs, findOddspapiFixture, oddspapiPrices, matchPrice,
+  getJson, pinnapiSportId, pinnapiEvents, findPinnapiEvent, pinnapiPrices, pinnapiFind,
+  oddspapiSportId, tippmixSlugs, bookList, findSlug, findOddspapiFixture, oddspapiPrices, matchPrice,
 } from './providers.js';
+
+const SHARP = /^(pinnacle|betinasia)$/i;
+
+/** Value NonStop (surebet) jelzés -> a teszt közös alakja. A referencia-láb a Pinnacle/BetinAsia ára. */
+export function fromSurebet(sig) {
+  const refSharp = sig.ref && SHARP.test(sig.ref.book);
+  return {
+    sig: {
+      kind: 'sf', sport: sig.sport, league: sig.league, home: sig.home, away: sig.away, startAt: sig.startAt,
+      market: { type: `sf:${sig.value?.market ?? '?'}`, line: null }, pick: 0,
+      pin: refSharp ? [{ odds: Number(sig.ref.odds) }] : [],
+      soft: { book: sig.value?.book ?? '?', odds: [Number(sig.value?.odds)] },
+    },
+    a: { softOdds: Number(sig.value?.odds) },
+  };
+}
 
 const PINNAPI = 'https://pinnapi.com';
 const ODDSPAPI = 'https://api.oddspapi.io/v4';
@@ -17,7 +35,10 @@ const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/B
 export function makeProbe({ env, db, log, fetchImpl = fetch }) {
   const pinKey = env.PINNAPI_KEY, opKey = env.ODDSPAPI_KEY;
   if (env.PROBE === '0' || (!pinKey && !opKey)) return null;
-  const caps = { pinnapi: Number(env.PROBE_PINNAPI_DAILY ?? 30), oddspapi: Number(env.PROBE_ODDSPAPI_DAILY ?? 6) };
+  const caps = {
+    pinnapi: { oh: Number(env.PROBE_PINNAPI_OH_DAILY ?? 20), sf: Number(env.PROBE_PINNAPI_SF_DAILY ?? 10) },
+    oddspapi: { oh: Number(env.PROBE_ODDSPAPI_OH_DAILY ?? 2), sf: Number(env.PROBE_ODDSPAPI_SF_DAILY ?? 4) },
+  };
   const RAW_SAMPLES = 3; // az első néhány nyers választ elmentjük a későbbi feldolgozó megírásához
 
   let queue = Promise.resolve();
@@ -31,8 +52,8 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
   };
 
   const memCount = new Map(); // adatbázis nélkül (vagy DB-hiba esetén) is legyen napi limit
-  async function counter(provider, inc = 0) {
-    const key = `probe_${provider}_${today()}`;
+  async function counter(provider, kind, inc = 0) {
+    const key = `probe_${provider}_${kind}_${today()}`;
     let n = memCount.get(key) ?? 0;
     try { if (db) n = Math.max(n, Number((await db.getState(key)) ?? 0)); } catch { /* marad a memóriás */ }
     n += inc;
@@ -51,6 +72,7 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
 
   // ---------- pinnapi ----------
   async function probePinnapi(sig) {
+    if (sig.kind === 'sf' && !sig.pin.length) return { found: false, skipped: true };
     const sportId = pinnapiSportId(sig.sport);
     if (!sportId) return { found: false, error: `ismeretlen sportág: ${sig.sport}` };
     const h = { 'x-portal-apikey': pinKey };
@@ -68,18 +90,24 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
     const r = await getJson(`${PINNAPI}/kit/v1/prematch/lines?event_id=${ev.event_id}`, h, fetchImpl);
     if (!r.ok) return { found: true, calls, event: String(ev.event_id), error: `lines HTTP ${r.status}: ${r.text}` };
     let evFull = pinnapiEvents(r.json)[0] ?? r.json?.event ?? r.json;
-    let prices = pinnapiPrices(evFull, sig);
+    let prices = sig.kind === 'sf' ? pinnapiFind(evFull, sig.pin[0]?.odds) : pinnapiPrices(evFull, sig);
     let raw = r.json;
     if (!prices) { // a "lines" nézetben nincs meg a vonal: a teljes piaclistát kérjük
       await sleep(3500);
       calls++;
       const m = await getJson(`${PINNAPI}/kit/v1/prematch/markets?event_id=${ev.event_id}`, h, fetchImpl);
-      if (m.ok) { evFull = pinnapiEvents(m.json)[0] ?? m.json?.event ?? m.json; prices = pinnapiPrices(evFull, sig); raw = m.json; }
+      if (m.ok) {
+        evFull = pinnapiEvents(m.json)[0] ?? m.json?.event ?? m.json;
+        prices = sig.kind === 'sf' ? pinnapiFind(evFull, sig.pin[0]?.odds) : pinnapiPrices(evFull, sig);
+        raw = m.json;
+      }
     }
     const sigPin = sig.pin.map((x) => x.odds);
     return {
       found: true, calls, event: String(ev.event_id), home: ev.home, away: ev.away, league: ev.league_name,
-      pinOdds: prices, pinMatch: prices ? prices.every((p, i) => Math.abs(Number(p) - sigPin[i]) <= 0.03) : null,
+      pinOdds: prices,
+      pinMatch: sig.kind === 'sf' ? (sigPin.length ? !!prices : null)
+        : prices ? prices.every((p, i) => Math.abs(Number(p) - sigPin[i]) <= 0.03) : null,
       raw: await rawSample('pinnapi', raw),
     };
   }
@@ -87,18 +115,21 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
   // ---------- OddsPapi ----------
   async function opMeta() {
     return cached('op_meta', 24 * 3600e3, async () => {
-      const saved = await db?.getState('probe_oddspapi_meta_v2');
+      const saved = await db?.getState('probe_oddspapi_meta_v3');
       if (saved) return JSON.parse(saved);
       const s = await getJson(`${ODDSPAPI}/sports?apiKey=${opKey}`, {}, fetchImpl);
       await sleep(2200);
       const b = await getJson(`${ODDSPAPI}/bookmakers?apiKey=${opKey}`, {}, fetchImpl);
       if (!s.ok || !b.ok) throw new Error(`meta HTTP ${s.status}/${b.status}: ${s.ok ? b.text : s.text}`);
-      const meta = { sports: s.json, tippmix: tippmixSlugs(b.json), hasPinnacle: JSON.stringify(b.json).includes('"pinnacle"') };
+      const books = bookList(b.json);
+      const meta = { sports: s.json, books, tippmix: tippmixSlugs(b.json), hasPinnacle: books.some((x) => x.slug === 'pinnacle') };
+      const hu = books.filter((x) => /vegas|tipp?mix|szerencse|hungar|\.hu\b|unibet\.hu|betsson\.hu/i.test(`${x.slug} ${x.name}`));
+      log(`🔎 OddsPapi magyar irodák: ${hu.map((x) => `${x.name} (${x.slug})`).join(', ') || 'nincs'}`);
       const n = Array.isArray(b.json) ? b.json.length : Array.isArray(b.json?.data) ? b.json.data.length : Object.keys(b.json ?? {}).length;
       log(`🔎 OddsPapi irodák (${n} db): Pinnacle ${meta.hasPinnacle ? 'van' : 'NINCS'}, Tippmix-slug: ${meta.tippmix.join(', ') || 'NINCS'}`);
       if (!meta.tippmix.length) log(`🔎 OddsPapi /bookmakers minta: ${JSON.stringify(b.json).slice(0, 400)}`);
       await db?.setState('probe_oddspapi_bookmakers_raw', JSON.stringify(b.json).slice(0, 100_000)).catch(() => {});
-      await db?.setState('probe_oddspapi_meta_v2', JSON.stringify(meta));
+      await db?.setState('probe_oddspapi_meta_v3', JSON.stringify(meta));
       return meta;
     });
   }
@@ -120,14 +151,15 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
     if (!fx) return { found: false, calls, details: { fixtures_in_window: Array.isArray(list) ? list.length : null } };
     await sleep(2200);
     calls++;
-    const books = ['pinnacle', ...meta.tippmix].join(',');
+    const softSlugs = [...new Set([findSlug(meta.books, sig.soft.book), ...meta.tippmix].filter(Boolean))];
+    const books = ['pinnacle', ...softSlugs].join(',');
     const r = await getJson(`${ODDSPAPI}/odds?fixtureId=${fx.fixtureId}&bookmakers=${books}&oddsFormat=decimal&apiKey=${opKey}`, {}, fetchImpl);
     if (!r.ok) return { found: true, calls, event: fx.fixtureId, error: `odds HTTP ${r.status}: ${r.text}` };
     const present = Object.keys(r.json?.bookmakerOdds ?? {});
     const pin = oddspapiPrices(r.json, 'pinnacle');
-    const pinHit = matchPrice(pin, sig.pin[sig.pick ?? 0]?.odds);
+    const pinHit = sig.pin.length ? matchPrice(pin, sig.pin[sig.pick ?? 0]?.odds) : null;
     let soft = null, softHit = null, softSlug = null;
-    for (const slug of meta.tippmix) {
+    for (const slug of softSlugs) {
       const p = oddspapiPrices(r.json, slug);
       if (!p) continue;
       soft = p; softSlug = slug; softHit = matchPrice(p, softTarget);
@@ -135,9 +167,10 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
     }
     return {
       found: true, calls, event: fx.fixtureId, home: fx.participant1Name, away: fx.participant2Name, league: fx.tournamentName,
-      bookmakers: present, pinMatch: pin ? !!pinHit : null, softFound: !!soft, softMatch: soft ? !!softHit : null,
+      bookmakers: present, pinMatch: pin && sig.pin.length ? !!pinHit : null, softFound: !!soft, softMatch: soft ? !!softHit : null,
       softChangedAt: softHit?.changedAt ?? null,
-      details: { softSlug, softMarkets: soft ? new Set(soft.map((x) => x.market)).size : 0, pinHit, softHit },
+      softSlugMapped: softSlugs[0] ?? null,
+      details: { softBook: sig.soft.book, softSlug, softSlugs, softMarkets: soft ? new Set(soft.map((x) => x.market)).size : 0, pinHit, softHit },
       raw: await rawSample('oddspapi', r.json),
     };
   }
@@ -145,15 +178,19 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
   const seen = new Set();
   async function run(provider, fn, sig, ref, a) {
     if (!(provider === 'pinnapi' ? pinKey : opKey)) return;
-    const key = `${provider}|${sig.home}|${sig.away}|${sig.startAt.toISOString()}|${sig.market.type}|${sig.market.line}`;
+    const key = `${provider}|${sig.kind}|${sig.home}|${sig.away}|${sig.startAt.toISOString()}|${sig.market.type}|${sig.market.line}`;
     if (seen.has(key)) return;
     seen.add(key);
-    if ((await counter(provider)) >= caps[provider]) return;
+    if ((await counter(provider, sig.kind)) >= caps[provider][sig.kind]) return;
     let res;
     try { res = await fn(); } catch (e) { res = { found: false, error: e.message.slice(0, 300) }; }
-    await counter(provider, 1);
-    log(`🔎 ${provider}: ${res.error ? `hiba – ${res.error}` : res.found
-      ? `megvan (${res.home} – ${res.away})${res.pinOdds ? ` Pinnacle ${res.pinOdds.join('/')}` : ''}${res.pinMatch != null ? ` ${res.pinMatch ? '✓' : '≠'} jelzés (${sig.pin.map((x) => x.odds).join('/')})` : ''}${res.softFound != null ? ` · Tippmix ${res.softFound ? (res.softMatch ? '✓ ugyanaz az ár' : '≠ más ár') : 'nincs'}` : ''}`
+    if (res.skipped) return;
+    await counter(provider, sig.kind, 1);
+    const softTxt = res.softFound != null
+      ? ` · ${sig.soft.book}${res.softSlugMapped ? '' : ' (nincs ilyen iroda)'} ${res.softFound ? (res.softMatch ? `✓ ugyanaz az ár (${a.softOdds})` : `≠ más ár (jelzés ${a.softOdds})`) : 'nincs a meccsnél'}`
+      : '';
+    log(`🔎 ${provider} [${sig.kind === 'sf' ? 'NonStop' : 'OddsHub'}]: ${res.error ? `hiba – ${res.error}` : res.found
+      ? `megvan (${res.home} – ${res.away})${res.pinOdds ? ` Pinnacle ${res.pinOdds.join('/')}` : ''}${res.pinMatch != null ? ` ${res.pinMatch ? '✓' : '≠'} jelzés (${sig.pin.map((x) => x.odds).join('/')})` : ''}${softTxt}`
       : 'nem találta a meccset'}`);
     await db?.insertProbe({
       channelId: ref.channelId, msgId: ref.msgId, provider, sig, a, ...res,
@@ -162,7 +199,9 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
 
   return {
     /** Nem blokkol: sorba teszi a lekérdezést. */
-    enqueue(sig, a, ref) {
+    enqueue(sig, a, ref, kind = 'oh') {
+      if (kind === 'sf') ({ sig, a } = fromSurebet(sig));
+      else sig = { ...sig, kind: 'oh' };
       if (!sig?.startAt || sig.pick == null) return;
       queue = queue
         .then(() => run('pinnapi', () => probePinnapi(sig), sig, ref, a))

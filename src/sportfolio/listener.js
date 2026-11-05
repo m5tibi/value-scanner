@@ -207,7 +207,10 @@ async function main() {
 
   // 🔎 Adatforrás-teszt (pinnapi / OddsPapi), ha meg vannak adva a kulcsok
   const probe = makeProbe({ env, db, log });
-  if (probe) log(`🔎 Adatforrás-teszt bekapcsolva (napi limit: pinnapi ${probe.caps.pinnapi}, OddsPapi ${probe.caps.oddspapi} jelzés)`);
+  if (probe) {
+    const c = probe.caps;
+    log(`🔎 Adatforrás-teszt bekapcsolva (napi limit – pinnapi: OddsHub ${c.pinnapi.oh}, NonStop ${c.pinnapi.sf}; OddsPapi: OddsHub ${c.oddspapi.oh}, NonStop ${c.oddspapi.sf})`);
+  }
 
   // 🔁 / ↔️ kereszt-megerősítés a csatornák között
   const confirm = makeConfirmTracker();
@@ -230,7 +233,7 @@ async function main() {
       if (!r) return; // capper-tipp vagy egyéb üzenet
       log(`[${title}] ${short(r)}`);
       await save(r, m, chId, title);
-      if (probe && r.kind === 'oh') probe.enqueue(r.sig, r.a, { channelId: chId, msgId: m.id });
+      if (probe && r.a.verdict !== 'kihagy') probe.enqueue(r.sig, r.a, { channelId: chId, msgId: m.id }, r.kind);
 
       const entry = confirmEntry(r, title);
       const cf = confirm.check(entry);

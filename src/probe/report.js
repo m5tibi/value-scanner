@@ -15,21 +15,29 @@ if (!rows.length) { console.log('Még nincs teszteredmény.'); process.exit(0); 
 
 console.log(`Teszteredmények: ${rows.length} sor (${rows[0].created_at.toLocaleString('hu-HU')} – ${rows.at(-1).created_at.toLocaleString('hu-HU')})\n`);
 
-for (const provider of ['pinnapi', 'oddspapi']) {
-  const rs = rows.filter((r) => r.provider === provider);
+const KINDS = { oh: 'OddsHub (TPro/Tippmix)', sf: 'Value NonStop' };
+const kindOf = (r) => (String(r.market ?? '').startsWith('sf:') ? 'sf' : 'oh');
+for (const provider of ['pinnapi', 'oddspapi']) for (const kind of ['oh', 'sf']) {
+  const rs = rows.filter((r) => r.provider === provider && kindOf(r) === kind);
   if (!rs.length) continue;
   const ok = rs.filter((r) => !r.error || r.found);
   const found = rs.filter((r) => r.found);
-  console.log(`=== ${provider} ===`);
+  console.log(`=== ${provider} · ${KINDS[kind]} ===`);
   console.log(`  Lekérdezett jelzés: ${rs.length} · hiba: ${rs.filter((r) => r.error).length}`);
   console.log(`  Meccs megtalálva: ${found.length}/${ok.length} (${pct(found.length, ok.length)})`);
   const pinChecked = found.filter((r) => r.pin_match !== null);
   console.log(`  Pinnacle-ár egyezik a jelzéssel: ${pinChecked.filter((r) => r.pin_match).length}/${pinChecked.length} (${pct(pinChecked.filter((r) => r.pin_match).length, pinChecked.length)})`);
   if (provider === 'oddspapi') {
-    const sf = found.filter((r) => r.soft_found !== null);
-    console.log(`  TippmixPro a meccsnél: ${sf.filter((r) => r.soft_found).length}/${sf.length} (${pct(sf.filter((r) => r.soft_found).length, sf.length)})`);
-    const sm = found.filter((r) => r.soft_found);
-    console.log(`  TippmixPro-ár egyezik a jelzéssel: ${sm.filter((r) => r.soft_match).length}/${sm.length} (${pct(sm.filter((r) => r.soft_match).length, sm.length)})`);
+    // Soft irodánként: megvan-e a meccsnél, és egyezik-e az ár
+    const byBook = new Map();
+    for (const r of found) {
+      const b = byBook.get(r.soft_book) ?? { n: 0, present: 0, match: 0 };
+      b.n++; if (r.soft_found) b.present++; if (r.soft_match) b.match++;
+      byBook.set(r.soft_book, b);
+    }
+    for (const [book, b] of [...byBook].sort((x, y) => y[1].n - x[1].n)) {
+      console.log(`  ${book}: a meccsnél ${b.present}/${b.n}, ugyanaz az ár ${b.match}/${b.present || 0}`);
+    }
     const books = new Map();
     for (const r of found) for (const b of r.bookmakers ?? []) books.set(b, (books.get(b) ?? 0) + 1);
     if (books.size) console.log(`  Irodák a válaszokban: ${[...books].map(([b, n]) => `${b} (${n})`).join(', ')}`);
