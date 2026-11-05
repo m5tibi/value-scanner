@@ -115,7 +115,7 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
   // ---------- OddsPapi ----------
   async function opMeta() {
     return cached('op_meta', 24 * 3600e3, async () => {
-      const saved = await db?.getState('probe_oddspapi_meta_v3');
+      const saved = await db?.getState('probe_oddspapi_meta_v4');
       if (saved) return JSON.parse(saved);
       const s = await getJson(`${ODDSPAPI}/sports?apiKey=${opKey}`, {}, fetchImpl);
       await sleep(2200);
@@ -123,13 +123,13 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
       if (!s.ok || !b.ok) throw new Error(`meta HTTP ${s.status}/${b.status}: ${s.ok ? b.text : s.text}`);
       const books = bookList(b.json);
       const meta = { sports: s.json, books, tippmix: tippmixSlugs(b.json), hasPinnacle: books.some((x) => x.slug === 'pinnacle') };
-      const hu = books.filter((x) => /vegas|tipp?mix|szerencse|hungar|\.hu\b|unibet\.hu|betsson\.hu/i.test(`${x.slug} ${x.name}`));
+      // Magyar (vagy .hu-s) irodák: Vegas.hu, Tippmix, Szerencsejáték – a "LeoVegas" NEM ide tartozik
+      const hu = books.filter((x) => /(^|[^a-z])vegas\.?hu|tipp?mix|szerencse|hungar|\.hu$/i.test(`${x.slug} ${x.name}`) && !/leovegas/i.test(x.slug));
       log(`🔎 OddsPapi magyar irodák: ${hu.map((x) => `${x.name} (${x.slug})`).join(', ') || 'nincs'}`);
       const n = Array.isArray(b.json) ? b.json.length : Array.isArray(b.json?.data) ? b.json.data.length : Object.keys(b.json ?? {}).length;
       log(`🔎 OddsPapi irodák (${n} db): Pinnacle ${meta.hasPinnacle ? 'van' : 'NINCS'}, Tippmix-slug: ${meta.tippmix.join(', ') || 'NINCS'}`);
-      if (!meta.tippmix.length) log(`🔎 OddsPapi /bookmakers minta: ${JSON.stringify(b.json).slice(0, 400)}`);
       await db?.setState('probe_oddspapi_bookmakers_raw', JSON.stringify(b.json).slice(0, 100_000)).catch(() => {});
-      await db?.setState('probe_oddspapi_meta_v3', JSON.stringify(meta));
+      await db?.setState('probe_oddspapi_meta_v4', JSON.stringify(meta));
       return meta;
     });
   }

@@ -34,7 +34,7 @@ const PIN_LINES = { events: [{ event_id: 222, periods: { num_0: {
 } } }] };
 
 const OP_SPORTS = [{ sportId: 10, sportName: 'Soccer' }, { sportId: 15, sportName: 'Ice Hockey', slug: 'ice-hockey' }, { sportId: 11, sportName: 'Basketball' }];
-const OP_BOOKS = [{ slug: 'pinnacle', bookmakerName: 'Pinnacle' }, { slug: 'bet365', bookmakerName: 'Bet365' }, { slug: 'tippmixpro', bookmakerName: 'TippmixPro' }, { slug: '1xbet', bookmakerName: '1xBet' }, { slug: 'vegashu', bookmakerName: 'Vegas.hu' }];
+const OP_BOOKS = [{ slug: 'pinnacle', bookmakerName: 'Pinnacle' }, { slug: 'bet365', bookmakerName: 'Bet365' }, { slug: 'tippmixpro', bookmakerName: 'TippmixPro' }, { slug: '1xbet', bookmakerName: '1xBet' }, { slug: 'vegashu', bookmakerName: 'Vegas.hu' }, { slug: 'leovegas', bookmakerName: 'LeoVegas' }];
 const OP_FIXTURES = [{ fixtureId: 'id1', participant1Name: 'Kiekko-Vantaa', participant2Name: 'RoKi Rovaniemi', startTime: '2026-10-30T16:30:00.000Z', tournamentName: 'Mestis' }];
 const OP_ODDS = { fixtureId: 'id1', bookmakerOdds: {
   pinnacle: { markets: { 15101: { bookmakerMarketId: 'moneyline', outcomes: { 1: { players: { 0: { price: 1.833, bookmakerOutcomeId: 'home', active: true } } }, 2: { players: { 0: { price: 1.909, bookmakerOutcomeId: 'away', active: true } } } } } } },
@@ -176,4 +176,5 @@ Pinnacle:
   assert.ok(op.softFound && op.softMatch);           // 1xBet 1.5 megvan az OddsPapi-ban
   assert.ok(urls.some((u) => u.includes('bookmakers=pinnacle,1xbet')));
   assert.ok(logs.some((l) => /magyar irodák: .*Vegas\.hu/.test(l)));
+  assert.ok(!logs.some((l) => /magyar irodák: .*LeoVegas/.test(l)));
 });
