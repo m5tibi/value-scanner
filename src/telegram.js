@@ -24,16 +24,35 @@ export function formatSignal(s) {
   ].join('\n');
 }
 
-export function makeNotifier({ token, chatId, fetchImpl = fetch, log = console.log }) {
+/**
+ * Telegram-értesítő újrapróbálkozással: hálózati hiba, 429 (túl sok kérés) vagy 5xx esetén
+ * legfeljebb 3-szor próbálja újra (2 s, 5 s, 10 s várakozással; 429-nél a Telegram retry_after értékével).
+ */
+export function makeNotifier({ token, chatId, fetchImpl = fetch, log = console.log, delays = [2000, 5000, 10000], sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   if (!token || !chatId) {
     return async (text) => log(`[TELEGRAM KIKAPCSOLVA]\n${text.replace(/<[^>]+>/g, '')}\n`);
   }
   return async (text) => {
-    const res = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
-    });
-    if (!res.ok) log(`Telegram hiba ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    for (let attempt = 0; ; attempt++) {
+      let retryAfterMs = null, why;
+      try {
+        const res = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+        });
+        if (res.ok) return true;
+        const body = (await res.text()).slice(0, 200);
+        if (res.status !== 429 && res.status < 500) { log(`Telegram hiba ${res.status}: ${body}`); return false; } // pl. hibás HTML: nincs értelme újra
+        try { retryAfterMs = (JSON.parse(body)?.parameters?.retry_after ?? 0) * 1000 || null; } catch { /* nem JSON */ }
+        why = `HTTP ${res.status}`;
+      } catch (e) {
+        why = e.message; // pl. "fetch failed" (hálózati hiba)
+      }
+      if (attempt >= delays.length) { log(`Telegram: nem sikerült elküldeni ${attempt + 1} próbálkozás után (${why})`); return false; }
+      const wait = retryAfterMs ?? delays[attempt];
+      log(`Telegram: ${why} – újrapróbálom ${Math.round(wait / 1000)} mp múlva (${attempt + 1}/${delays.length})`);
+      await sleep(wait);
+    }
   };
 }
