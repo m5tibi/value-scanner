@@ -23,7 +23,16 @@ export function tokens(name) {
     .filter((t) => t && !STOP.has(t));
 }
 
-const distinctive = (ts) => ts.filter((t) => t.length >= 4 && !GENERIC.has(t));
+const distinctive = (ts) => ts.filter((t) => t.length >= 4 && !GENERIC.has(t) && !QUAL[t]);
+
+// Minősítők: különfogadás-események (szöglet, lap) soha nem azonosak a fő meccsel;
+// női/utánpótlás-eltérésnél csak gyengébb az egyezés (a források néha elhagyják a "Women" szót).
+const QUAL = {
+  corners: 'special', corner: 'special', bookings: 'special', booking: 'special', cards: 'special', specials: 'special',
+  women: 'women', ladies: 'women', wfc: 'women', femenil: 'women', feminino: 'women', femenino: 'women', w: 'women',
+  u17: 'u17', u18: 'u18', u19: 'u19', u20: 'u20', u21: 'u21', u23: 'u23', ii: 'ii', reserves: 'ii', b: 'ii',
+};
+const quals = (ts) => new Set(ts.map((t) => QUAL[t]).filter(Boolean));
 
 /**
  * Mennyire ugyanaz a csapat (0..1): teljes egyezés = 1; különben a közös megkülönböztető szavak
@@ -33,10 +42,13 @@ export function teamScore(a, b) {
   const ta = tokens(a), tb = tokens(b);
   if (!ta.length || !tb.length) return 0;
   if (ta.join(' ') === tb.join(' ')) return 1;
+  const qa = quals(ta), qb = quals(tb);
+  if (qa.has('special') !== qb.has('special')) return 0;
   const da = distinctive(ta), db = new Set(distinctive(tb));
   if (!da.length || !db.size) return 0;
   const shared = da.filter((t) => db.has(t)).length;
-  return shared / Math.min(da.length, db.size);
+  const sameQual = qa.size === qb.size && [...qa].every((q) => qb.has(q));
+  return (shared / Math.min(da.length, db.size)) * (sameQual ? 1 : 0.6);
 }
 
 export const sameTeam = (a, b) => teamScore(a, b) >= 0.5;

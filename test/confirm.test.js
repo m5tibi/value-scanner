@@ -110,3 +110,17 @@ test('izraeli klubnevek: a közös "Hapoel"/"Maccabi" előtag nem elég', () => 
   assert.equal(bestMatch(list, sig, (x) => x).id, 2);
   assert.equal(bestMatch(list.slice(0, 1), sig, (x) => x), null);
 });
+
+test('különfogadás-esemény és női/férfi meccs megkülönböztetése', () => {
+  assert.equal(teamScore('Santos Laguna', 'Santos Laguna (Corners)'), 0);
+  assert.ok(teamScore('Santos Laguna', 'Santos Laguna Women') < teamScore('Santos Laguna', 'Club Santos Laguna'));
+  assert.ok(sameTeam('Kawempe Muslim', 'Kawempe Muslim Ladies')); // a forrás elhagyta a "Women"-t: még egyezik
+  const sig = { home: 'Santos Laguna', away: 'Club Tijuana', startAt: '2026-11-06T03:00:00Z' };
+  const list = [
+    { id: 'corners', home: 'Santos Laguna (Corners)', away: 'Tijuana (Corners)', startAt: '2026-11-06T03:00:00Z' },
+    { id: 'women', home: 'Santos Laguna Women', away: 'Tijuana Women', startAt: '2026-11-06T03:00:00Z' },
+    { id: 'men', home: 'Santos Laguna', away: 'Tijuana', startAt: '2026-11-06T03:00:00Z' },
+  ];
+  assert.equal(bestMatch(list, sig, (x) => x).id, 'men');
+  assert.equal(bestMatch(list.slice(0, 1), sig, (x) => x), null);
+});
