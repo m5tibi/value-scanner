@@ -87,15 +87,18 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
   // ---------- OddsPapi ----------
   async function opMeta() {
     return cached('op_meta', 24 * 3600e3, async () => {
-      const saved = await db?.getState('probe_oddspapi_meta');
+      const saved = await db?.getState('probe_oddspapi_meta_v2');
       if (saved) return JSON.parse(saved);
       const s = await getJson(`${ODDSPAPI}/sports?apiKey=${opKey}`, {}, fetchImpl);
       await sleep(2200);
       const b = await getJson(`${ODDSPAPI}/bookmakers?apiKey=${opKey}`, {}, fetchImpl);
       if (!s.ok || !b.ok) throw new Error(`meta HTTP ${s.status}/${b.status}: ${s.ok ? b.text : s.text}`);
       const meta = { sports: s.json, tippmix: tippmixSlugs(b.json), hasPinnacle: JSON.stringify(b.json).includes('"pinnacle"') };
-      log(`🔎 OddsPapi irodák: Pinnacle ${meta.hasPinnacle ? 'van' : 'NINCS'}, Tippmix-slug: ${meta.tippmix.join(', ') || 'NINCS'}`);
-      await db?.setState('probe_oddspapi_meta', JSON.stringify(meta));
+      const n = Array.isArray(b.json) ? b.json.length : Array.isArray(b.json?.data) ? b.json.data.length : Object.keys(b.json ?? {}).length;
+      log(`🔎 OddsPapi irodák (${n} db): Pinnacle ${meta.hasPinnacle ? 'van' : 'NINCS'}, Tippmix-slug: ${meta.tippmix.join(', ') || 'NINCS'}`);
+      if (!meta.tippmix.length) log(`🔎 OddsPapi /bookmakers minta: ${JSON.stringify(b.json).slice(0, 400)}`);
+      await db?.setState('probe_oddspapi_bookmakers_raw', JSON.stringify(b.json).slice(0, 100_000)).catch(() => {});
+      await db?.setState('probe_oddspapi_meta_v2', JSON.stringify(meta));
       return meta;
     });
   }
@@ -139,14 +142,18 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
     };
   }
 
+  const seen = new Set();
   async function run(provider, fn, sig, ref, a) {
     if (!(provider === 'pinnapi' ? pinKey : opKey)) return;
+    const key = `${provider}|${sig.home}|${sig.away}|${sig.startAt.toISOString()}|${sig.market.type}|${sig.market.line}`;
+    if (seen.has(key)) return;
+    seen.add(key);
     if ((await counter(provider)) >= caps[provider]) return;
     let res;
     try { res = await fn(); } catch (e) { res = { found: false, error: e.message.slice(0, 300) }; }
     await counter(provider, 1);
     log(`🔎 ${provider}: ${res.error ? `hiba – ${res.error}` : res.found
-      ? `megvan (${res.home} – ${res.away})${res.pinOdds ? ` Pinnacle ${res.pinOdds.join('/')}` : ''}${res.pinMatch != null ? ` ${res.pinMatch ? '✓' : '≠'} jelzés` : ''}${res.softFound != null ? ` · Tippmix ${res.softFound ? (res.softMatch ? '✓ ugyanaz az ár' : '≠ más ár') : 'nincs'}` : ''}`
+      ? `megvan (${res.home} – ${res.away})${res.pinOdds ? ` Pinnacle ${res.pinOdds.join('/')}` : ''}${res.pinMatch != null ? ` ${res.pinMatch ? '✓' : '≠'} jelzés (${sig.pin.map((x) => x.odds).join('/')})` : ''}${res.softFound != null ? ` · Tippmix ${res.softFound ? (res.softMatch ? '✓ ugyanaz az ár' : '≠ más ár') : 'nincs'}` : ''}`
       : 'nem találta a meccset'}`);
     await db?.insertProbe({
       channelId: ref.channelId, msgId: ref.msgId, provider, sig, a, ...res,

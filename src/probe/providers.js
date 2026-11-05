@@ -1,7 +1,7 @@
 // Adatforrás-teszt: pinnapi (Pinnacle) és OddsPapi (Pinnacle + TippmixPro) lekérdezése egy jelzés meccsére.
 // A hálózati rész vékony; a kiértékelő függvények tiszták (tesztelhetők).
 
-import { sameMatch } from '../sportfolio/confirm.js';
+import { bestMatch } from '../sportfolio/confirm.js';
 
 const TIMEOUT = 15_000;
 
@@ -47,7 +47,7 @@ export function pinnapiEvents(json) {
 }
 
 export function findPinnapiEvent(events, sig) {
-  return events.find((e) => sameMatch({ home: e.home, away: e.away, startAt: e.starts }, sig, 30)) ?? null;
+  return bestMatch(events, sig, (e) => ({ home: e.home, away: e.away, startAt: e.starts }));
 }
 
 /** A jelzés piacának Pinnacle-oddsai a pinnapi eseményből (periods.num_0). null, ha nincs ilyen vonal. */
@@ -84,18 +84,32 @@ export function oddspapiSportId(sports, sport) {
   return null;
 }
 
-/** A TippmixPro (vagy Tippmix) bookmaker-slug a /v4/bookmakers listából. */
+/**
+ * A TippmixPro (vagy Tippmix) bookmaker-slug a /v4/bookmakers válaszból.
+ * A válasz lehet tömb (objektumokkal vagy szövegekkel) vagy slug szerint kulcsolt objektum; mindegyiket kezeli,
+ * és a slug mellett a nevet is nézi.
+ */
 export function tippmixSlugs(bookmakers) {
-  const list = Array.isArray(bookmakers) ? bookmakers : bookmakers?.data ?? Object.values(bookmakers ?? {});
-  return list
-    .map((b) => (typeof b === 'string' ? b : b.slug ?? b.bookmaker ?? b.bookmakerSlug ?? ''))
-    .filter((s) => /tippmix/i.test(s));
+  const out = new Set();
+  const consider = (slug, obj) => {
+    const hay = `${slug ?? ''} ${obj && typeof obj === 'object' ? JSON.stringify(obj) : obj ?? ''}`;
+    if (/tipp?mix/i.test(hay)) out.add(String(slug ?? obj?.slug ?? obj?.bookmaker ?? obj?.bookmakerSlug ?? obj));
+  };
+  const src = Array.isArray(bookmakers?.data) ? bookmakers.data : bookmakers;
+  if (Array.isArray(src)) {
+    for (const b of src) consider(typeof b === 'string' ? b : b.slug ?? b.bookmaker ?? b.bookmakerSlug, b);
+  } else if (src && typeof src === 'object') {
+    for (const [k, v] of Object.entries(src)) consider(typeof v === 'object' && v?.slug ? v.slug : k, v);
+  }
+  return [...out].filter((x) => x && x !== 'undefined');
 }
 
 export function findOddspapiFixture(fixtures, sig) {
   const list = Array.isArray(fixtures) ? fixtures : fixtures?.data ?? [];
-  return list.find((f) => sameMatch({ home: f.participant1Name, away: f.participant2Name, startAt: f.startTime }, sig, 30)
-    || sameMatch({ home: f.participant1ShortName, away: f.participant2ShortName, startAt: f.startTime }, sig, 30)) ?? null;
+  return bestMatch(list, sig, (f) => [
+    { home: f.participant1Name, away: f.participant2Name, startAt: f.startTime },
+    { home: f.participant1ShortName, away: f.participant2ShortName, startAt: f.startTime },
+  ]);
 }
 
 /** Egy iroda összes (aktív) ára egy fixture odds-válaszából: [{ price, market, outcome, changedAt }] */

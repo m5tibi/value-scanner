@@ -108,3 +108,10 @@ test('teljes folyamat álválaszokkal: mindkét szolgáltató, napi limit, DB-me
 test('kulcs nélkül nincs teszt', () => {
   assert.equal(makeProbe({ env: {}, db: null, log() {} }), null);
 });
+
+test('Tippmix-slug a /bookmakers válasz többféle alakjából', () => {
+  assert.deepEqual(tippmixSlugs({ pinnacle: { name: 'Pinnacle' }, tippmixpro: { name: 'TippmixPro' } }), ['tippmixpro']);
+  assert.deepEqual(tippmixSlugs({ data: [{ slug: 'tmp', bookmakerName: 'Tippmix Pro' }] }), ['tmp']);
+  assert.deepEqual(tippmixSlugs(['pinnacle', 'tippmix']), ['tippmix']);
+  assert.deepEqual(tippmixSlugs([{ slug: 'bet365' }]), []);
+});

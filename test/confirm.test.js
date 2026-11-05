@@ -95,3 +95,18 @@ test('Rohrbach: 14% Pinnacle-árrésnél a tét max. 1 E', () => {
   assert.ok(a.stakes.length && a.stakes.every((x) => x.units <= 1));
   assert.match(a.warnings.join(' '), /nagyon nagy.*max\. 1 E/);
 });
+
+import { bestMatch, teamScore } from '../src/sportfolio/confirm.js';
+test('izraeli klubnevek: a közös "Hapoel"/"Maccabi" előtag nem elég', () => {
+  assert.ok(!sameTeam('Hapoel Tel Aviv', 'Hapoel Raanana'));
+  assert.ok(!sameTeam('Maccabi Kishronot Hadera', 'Maccabi Tel Aviv WFC'));
+  assert.ok(sameTeam('Maccabi Kishronot Hadera', 'Maccabi Kishronot Hadera FC'));
+  assert.ok(teamScore('SV Rohrbach', 'Sv Schermann Rohrbach an der Lafnitz') === 1);
+  const sig = { home: 'Hapoel Tel Aviv', away: 'Maccabi Kishronot Hadera', startAt: '2026-11-05T13:00:00Z' };
+  const list = [
+    { id: 1, home: 'Hapoel Raanana', away: 'Maccabi Tel Aviv WFC', startAt: '2026-11-05T13:00:00Z' },
+    { id: 2, home: 'Hapoel Tel Aviv', away: 'Maccabi Kishronot Hadera', startAt: '2026-11-05T13:00:00Z' },
+  ];
+  assert.equal(bestMatch(list, sig, (x) => x).id, 2);
+  assert.equal(bestMatch(list.slice(0, 1), sig, (x) => x), null);
+});
