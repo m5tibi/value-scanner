@@ -196,6 +196,20 @@ export function makeDb(databaseUrl) {
       }
     },
 
+    /** Adatforrás-teszt eredménye */
+    async insertProbe(x) {
+      await pool.query(
+        `insert into probe_results (channel_id, msg_id, provider, sport, league, home, away, start_at, market, line,
+           sig_pin_odds, sig_soft_odds, soft_book, found, provider_event, provider_home, provider_away, provider_league,
+           bookmakers, pin_odds, pin_match, soft_found, soft_match, soft_changed_at, calls, error, details, raw)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
+        [x.channelId, x.msgId, x.provider, x.sig.sport, x.sig.league, x.sig.home, x.sig.away, x.sig.startAt, x.sig.market.type,
+          x.sig.market.line, x.sig.pin.map((p) => p.odds), x.a?.softOdds ?? null, x.sig.soft.book, !!x.found, x.event ?? null,
+          x.home ?? null, x.away ?? null, x.league ?? null, x.bookmakers ?? null, x.pinOdds?.map(Number) ?? null,
+          x.pinMatch ?? null, x.softFound ?? null, x.softMatch ?? null, x.softChangedAt ?? null, x.calls ?? null,
+          x.error ?? null, x.details ? JSON.stringify(x.details) : null, x.raw ?? null]);
+    },
+
     async getState(key) {
       const r = await pool.query(`select value from value_bot_state where key = $1`, [key]);
       return r.rows[0]?.value ?? null;

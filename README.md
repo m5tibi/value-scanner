@@ -172,3 +172,12 @@ egy másik csatorna is jelzett az utóbbi 90 percben, az üzenet elején megjele
 Ezt a `confirmed_by` / `contradicted_by` oszlop rögzíti, így később kiértékelhető, hogy a dupla jelzések jobban teljesítenek-e.
 
 Tét: az azonos tétű lépcsőfokok összevonva jelennek meg (pl. `1 E @2.06–1.80`); 10% feletti Pinnacle-árrésnél a tét max. 1 E.
+
+## Adatforrás-teszt: pinnapi / OddsPapi (v0.9)
+
+Ha a figyelő környezetében meg van adva `PINNAPI_KEY` és/vagy `ODDSPAPI_KEY`, minden TPro/Tippmix-jelzésnél
+megkeresi ugyanazt a meccset az adott API-ban, összeveti a Pinnacle- (és OddsPapi-nál a TippmixPro-) oddsot a jelzéssel,
+és elmenti a `probe_results` táblába. A jelzés kiküldését nem lassítja.
+
+- Napi limit (az ingyenes keretek védelmére): `PROBE_PINNAPI_DAILY` (alap 30 jelzés), `PROBE_ODDSPAPI_DAILY` (alap 6). Kikapcsolás: `PROBE=0`.
+- Összesítés: `npm run probe:report` (csak az adatbázist olvassa, a saját gépen is futtatható).

@@ -144,3 +144,38 @@ alter table sportfolio_signals add column if not exists confirmed_by  text;
 alter table sportfolio_signals add column if not exists contradicted_by text;
 alter table oddshub_signals    add column if not exists confirmed_by  text;
 alter table oddshub_signals    add column if not exists contradicted_by text;
+
+-- Adatforrás-teszt (pinnapi / OddsPapi): megvan-e a jelzés meccse és ára az API-ban
+create table if not exists probe_results (
+  id            bigserial primary key,
+  created_at    timestamptz not null default now(),
+  channel_id    text,
+  msg_id        bigint,
+  provider      text not null,          -- pinnapi | oddspapi
+  sport         text,
+  league        text,
+  home          text,
+  away          text,
+  start_at      timestamptz,
+  market        text,
+  line          numeric,
+  sig_pin_odds  numeric[],
+  sig_soft_odds numeric,
+  soft_book     text,
+  found         boolean,
+  provider_event text,
+  provider_home text,
+  provider_away text,
+  provider_league text,
+  bookmakers    text[],
+  pin_odds      numeric[],
+  pin_match     boolean,
+  soft_found    boolean,
+  soft_match    boolean,
+  soft_changed_at text,
+  calls         int,
+  error         text,
+  details       jsonb,
+  raw           jsonb
+);
+alter table probe_results enable row level security;

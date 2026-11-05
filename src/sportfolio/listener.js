@@ -19,6 +19,7 @@ import { makeFollowUp } from './followup.js';
 import { parseOddsHub, analyzeOddsHub, formatOddsHub, markEmphasis } from './oddshub.js';
 import { makeConfirmTracker, directionSf, directionOh, confirmLines } from './confirm.js';
 import { improvedHeader } from '../alerts.js';
+import { makeProbe } from '../probe/probe.js';
 
 // Sor végi "# megjegyzés" levágása (egyes .env-betöltők nem teszik meg).
 const env = Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, typeof v === 'string' ? v.replace(/\s+#.*$/, '').trim() : v]));
@@ -204,6 +205,10 @@ async function main() {
     } catch (e) { log('Követési adatok betöltése sikertelen:', e.message); }
   }
 
+  // 🔎 Adatforrás-teszt (pinnapi / OddsPapi), ha meg vannak adva a kulcsok
+  const probe = makeProbe({ env, db, log });
+  if (probe) log(`🔎 Adatforrás-teszt bekapcsolva (napi limit: pinnapi ${probe.caps.pinnapi}, OddsPapi ${probe.caps.oddspapi} jelzés)`);
+
   // 🔁 / ↔️ kereszt-megerősítés a csatornák között
   const confirm = makeConfirmTracker();
   const confirmEntry = (r, title) => ({
@@ -225,6 +230,7 @@ async function main() {
       if (!r) return; // capper-tipp vagy egyéb üzenet
       log(`[${title}] ${short(r)}`);
       await save(r, m, chId, title);
+      if (probe && r.kind === 'oh') probe.enqueue(r.sig, r.a, { channelId: chId, msgId: m.id });
 
       const entry = confirmEntry(r, title);
       const cf = confirm.check(entry);
