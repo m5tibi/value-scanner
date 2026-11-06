@@ -47,6 +47,11 @@ export class OddsApi {
     });
   }
 
+  /** Az aktív sportkulcsok listája (ingyenes, nem fogy kredit). */
+  getSports() {
+    return this.#get('/sports/', {});
+  }
+
   /** Lezárt meccsek eredményei az utolsó 1-3 napból. */
   getScores(sport, daysFrom = 3) {
     return this.#get(`/sports/${sport}/scores/`, { daysFrom: String(daysFrom), dateFormat: 'iso' });

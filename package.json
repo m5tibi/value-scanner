@@ -1,6 +1,6 @@
 {
   "name": "value-scanner",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Pinnacle-alapú value-szkenner papíros CLV-naplózással (The Odds API + PostgreSQL + Telegram)",
   "type": "module",
   "main": "src/index.js",
@@ -15,6 +15,7 @@
     "report": "node src/index.js --report",
     "migrate": "node src/index.js --migrate",
     "test": "node --test test/*.test.js",
+    "discover": "node --env-file=.env src/index.js --discover",
     "sf:login": "node --env-file=.env src/sportfolio/listener.js --login",
     "sf:channels": "node --env-file=.env src/sportfolio/listener.js --channels",
     "sf:backfill": "node --env-file=.env src/sportfolio/listener.js --backfill 50",

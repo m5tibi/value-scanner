@@ -32,6 +32,13 @@ export function loadConfig(rawEnv = process.env) {
     // Napi kreditkeret (budapesti nap szerint). 0 = nincs korlát.
     dailyCreditBudget: num(env.DAILY_CREDIT_BUDGET, 0),
 
+    // Automatikus ligalista (SPORTS=auto) és körforgás
+    tickMinutes: num(env.TICK_MINUTES, 10),             // a cron gyakorisága (a napi keret elosztásához)
+    discoverMaxCredits: num(env.DISCOVER_MAX_CREDITS, 150),
+    discoverTop: num(env.DISCOVER_TOP, 25),
+    discoverEveryDays: num(env.DISCOVER_EVERY_DAYS, 7),
+    discoverGroups: list(env.DISCOVER_GROUPS, 'Soccer,Basketball,Ice Hockey,Handball,Tennis'),
+
     // Követő értesítések
     improveMinDelta: num(env.IMPROVE_MIN_DELTA, 0.02),   // ennyivel nagyobb előny kell a 🔔-hoz
     improveMax: num(env.IMPROVE_MAX, 2),                // kimenetelenként legfeljebb ennyi 🔔

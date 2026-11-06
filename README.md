@@ -183,3 +183,14 @@ megkeresi ugyanazt a meccset az adott API-ban, összeveti a Pinnacle- (és OddsP
 - Napi limit jelzésszámban (az ingyenes keretek védelmére): `PROBE_PINNAPI_OH_DAILY` (20), `PROBE_PINNAPI_SF_DAILY` (10),
   `PROBE_ODDSPAPI_OH_DAILY` (2), `PROBE_ODDSPAPI_SF_DAILY` (4). A „kihagy” jelzéseket nem vizsgálja. Kikapcsolás: `PROBE=0`.
 - Összesítés: `npm run probe:report` (csak az adatbázist olvassa, a saját gépen is futtatható).
+
+## Automatikus ligalista és kreditbeosztás (v0.10)
+
+- `SPORTS=auto`: a szkenner hetente egyszer (vagy `node src/index.js --discover`) végignézi a The Odds API ligáit
+  (foci, kosár, hoki, kézi, tenisz), és kiválasztja azt a legfeljebb 25-öt, ahol a Pinnacle mellett soft iroda is van,
+  és már egy olcsó összevetés is mutat pozitív előnyt. Költség: ligánként 1 kredit (az üres válasz ingyenes), max. 150.
+  Az eredményt Telegramon is elküldi (🗺 Liga-feltérképezés kész).
+- Körforgás: minden kör onnan folytatja, ahol az előző abbahagyta, és csak a napi keret (`DAILY_CREDIT_BUDGET`)
+  rá eső részét költi el; a meccs nélküli ligák ingyenesek, azokat csak átugorja.
+- A kredit hívásonként fogy, nem meccsenként, ezért érdemes hosszú ablakot (`LOOKAHEAD_HOURS=24`) és sok soft irodát
+  (max. 9 + Pinnacle = 1 régió) használni.

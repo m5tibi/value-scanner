@@ -4,6 +4,7 @@
 //   node src/index.js --settle   -> egy elszámolási kör
 //   node src/index.js --report   -> riport a konzolra (és Telegramra)
 //   node src/index.js --migrate  -> tábla létrehozása
+//   node src/index.js --discover -> liga-feltérképezés (SPORTS=auto esetén hetente magától is lefut)
 
 import { loadConfig } from './config.js';
 import { OddsApi } from './oddsApi.js';
@@ -12,6 +13,7 @@ import { settleSignal, parseScores } from './settle.js';
 import { makeNotifier, formatSignal, bookName } from './telegram.js';
 import { makeDb } from './db.js';
 import { isImprovement, improvedHeader } from './alerts.js';
+import { discoverOnce, discoveryDue, rotate } from './discover.js';
 
 const cfg = loadConfig();
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -32,14 +34,41 @@ async function loadBudget(db) {
   };
 }
 
+const FALLBACK_SPORTS = ['soccer_epl', 'soccer_uefa_champs_league', 'basketball_euroleague'];
+
+/** A szkennelendő sportok: SPORTS=auto esetén a feltérképezés eredménye, különben a megadott lista. */
+async function resolveSports(db) {
+  if (!cfg.sports.includes('auto')) return cfg.sports;
+  const extra = cfg.sports.filter((s) => s !== 'auto'); // SPORTS=auto,soccer_epl -> a feltérképezett + ezek
+  const auto = ((await db.getState('auto_sports')) ?? '').split(',').filter(Boolean);
+  const all = [...new Set([...(auto.length ? auto : FALLBACK_SPORTS), ...extra])];
+  return all;
+}
+
+/** Egy körre jutó kredit: a napi maradék elosztva a nap hátralévő köreire (legalább egy sport). */
+function tickAllowance(budget) {
+  if (!budget || !cfg.dailyCreditBudget) return Infinity;
+  const remaining = cfg.dailyCreditBudget - budget.used;
+  const [h, m] = new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Budapest', hour12: false }).split(':').map(Number);
+  const ticksLeft = Math.max(1, Math.ceil((24 * 60 - (h * 60 + m)) / cfg.tickMinutes));
+  return Math.max(cfg.markets.length, remaining / ticksLeft);
+}
+
 async function scanOnce({ api, db, notify, budget }) {
-  const books = [cfg.sharpBook, ...cfg.softBooks];
+  const books = [cfg.sharpBook, ...cfg.softBooks].slice(0, 10);
+  const allSports = await resolveSports(db);
+  // Körforgás: az előző kör után folytatja; a kör kreditkeretéig halad (az üres válasz ingyenes, azt átugorja).
+  const pointer = Number(await db.getState('scan_pointer')) || 0;
+  const { batch: ordered } = rotate(allSports, pointer, allSports.length);
+  const allowance = tickAllowance(budget);
+  let spentThisTick = 0, scanned = 0;
   let newSignals = 0;
   let improved = 0;
   const rejectedTotal = {};
   const st = { events: 0, withSharp: 0, compared: 0, positive: 0, best: null };
 
-  for (const sport of cfg.sports) {
+  for (const sport of ordered) {
+    if (spentThisTick >= allowance) break;
     if (api.remaining !== null && api.remaining < cfg.minQuotaRemaining) {
       log(`Kvóta alacsony (${api.remaining}), szkennelés leállítva.`);
       break;
@@ -57,6 +86,8 @@ async function scanOnce({ api, db, notify, budget }) {
     } finally {
       // Üres válasz ingyenes; a tényleges költséget a válaszfejléc adja meg.
       budget?.add(api.lastCost ?? 0);
+      spentThisTick += api.lastCost ?? 0;
+      scanned++;
     }
     const { signals, sharpSnapshots, rejected, stats } = scanEvents(events, cfg);
     for (const [k, v] of Object.entries(rejected)) rejectedTotal[k] = (rejectedTotal[k] ?? 0) + v;
@@ -81,7 +112,9 @@ async function scanOnce({ api, db, notify, budget }) {
       }
     }
   }
+  await db.setState('scan_pointer', String((pointer + scanned) % Math.max(1, allSports.length)));
   const b = budget && cfg.dailyCreditBudget ? ` Ma: ${budget.used}/${cfg.dailyCreditBudget}.` : '';
+  log(`Kör: ${scanned}/${allSports.length} liga, ${spentThisTick} kredit (keret erre a körre: ${allowance === Infinity ? '∞' : allowance.toFixed(1)}).`);
   log(`Szkennelés kész: ${newSignals} új jelzés, ${improved} javulás. Kvóta maradt: ${api.remaining ?? '?'}.${b} Kiszűrve:`, rejectedTotal);
   if (st.events) {
     const best = st.best
@@ -150,6 +183,14 @@ async function reportOnce({ db, notify }, days = 30) {
 /** Egy kör: mindig szkennel; elszámol, ha letelt SETTLE_INTERVAL_MIN; riportot küld naponta egyszer 9:00 után. */
 async function tick({ api, db, notify }) {
   const budget = await loadBudget(db);
+  if (cfg.sports.includes('auto') && (await discoveryDue(db, cfg.discoverEveryDays))) {
+    const left = cfg.dailyCreditBudget ? cfg.dailyCreditBudget - budget.used : cfg.discoverMaxCredits;
+    if (left >= 20) {
+      await discoverOnce({ api, db, cfg, log, notify, budget, maxCredits: Math.min(cfg.discoverMaxCredits, left), groups: cfg.discoverGroups, top: cfg.discoverTop })
+        .catch((e) => log('Feltérképezési hiba:', e.message));
+      await budget.save();
+    }
+  }
   await scanOnce({ api, db, notify, budget }).catch((e) => log('Szkennelési hiba:', e.message));
 
   const lastSettle = Number(await db.getState('last_settle_ms')) || 0;
@@ -179,13 +220,19 @@ async function main() {
     await db.migrate();
     if (args.has('--once')) { await scanOnce({ api, db, notify }); return; }
     if (args.has('--settle')) { await settleOnce({ api, db }); return; }
+    if (args.has('--discover')) {
+      const budget = await loadBudget(db);
+      await discoverOnce({ api, db, cfg, log, notify, budget, maxCredits: cfg.discoverMaxCredits, groups: cfg.discoverGroups, top: cfg.discoverTop });
+      await budget.save();
+      return;
+    }
 
     // --tick: egy teljes kör (szkennelés + esedékes elszámolás + esedékes riport), majd kilép.
     // Ütemezőhöz (Render Cron Job, GitHub Actions) való; az állapotot az adatbázis tárolja.
     if (args.has('--tick')) { await tick({ api, db, notify }); return; }
 
     // Folyamatos futás (Render Background Worker)
-    log(`Indulás: ${cfg.sports.length} sport, piacok: ${cfg.markets.join(',')}, ${cfg.scanIntervalMin} percenként.`);
+    log(`Indulás: ${cfg.sports.includes('auto') ? 'automatikus ligalista' : `${cfg.sports.length} sport`}, piacok: ${cfg.markets.join(',')}, ${cfg.scanIntervalMin} percenként.`);
     for (;;) {
       await tick({ api, db, notify }).catch((e) => log('Hiba a körben:', e.message));
       await new Promise((r) => setTimeout(r, cfg.scanIntervalMin * 60e3));

@@ -23,13 +23,13 @@ services:
       - key: NODE_VERSION
         value: "20"
       - key: SPORTS
-        value: soccer_epl,soccer_spain_la_liga,soccer_uefa_champs_league,soccer_uefa_europa_league,basketball_euroleague
+        value: auto                  # hetente feltérképezi a ligákat (Pinnacle + soft iroda), és ezeket figyeli felváltva
       - key: MARKETS
         value: totals,spreads
       - key: SOFT_BOOKS
-        value: onexbet,marathonbet
+        value: onexbet,marathonbet,betsson,nordicbet,unibet_se,williamhill,sport888,coolbet,tipico_de   # max. 9 (+Pinnacle = 1 régió)
       - key: LOOKAHEAD_HOURS
-        value: "3"
+        value: "24"                  # a kredit hívásonként fogy, nem meccsenként: hosszabb ablak = több meccs ugyanannyiért
       - key: SETTLE_INTERVAL_MIN
         value: "60"
       - key: MIN_QUOTA_REMAINING
