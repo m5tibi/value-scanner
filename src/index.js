@@ -13,7 +13,7 @@ import { settleSignal, parseScores } from './settle.js';
 import { makeNotifier, formatSignal, bookName } from './telegram.js';
 import { makeDb } from './db.js';
 import { isImprovement, improvedHeader } from './alerts.js';
-import { discoverOnce, discoveryDue, rotate } from './discover.js';
+import { discoverOnce, discoveryDue, rotate, pickSports } from './discover.js';
 
 const cfg = loadConfig();
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -40,7 +40,13 @@ const FALLBACK_SPORTS = ['soccer_epl', 'soccer_uefa_champs_league', 'basketball_
 async function resolveSports(db) {
   if (!cfg.sports.includes('auto')) return cfg.sports;
   const extra = cfg.sports.filter((s) => s !== 'auto'); // SPORTS=auto,soccer_epl -> a feltérképezett + ezek
-  const auto = ((await db.getState('auto_sports')) ?? '').split(',').filter(Boolean);
+  // A rangsort mindig az elmentett feltérképezésből számolja újra (kredit nélkül), így a szabályok változása azonnal érvényes.
+  let auto = [];
+  try {
+    const saved = JSON.parse((await db.getState('discover_result')) ?? 'null');
+    if (saved?.results?.length) auto = pickSports(saved.results, { top: cfg.discoverTop });
+  } catch { /* régi/hibás állapot */ }
+  if (!auto.length) auto = ((await db.getState('auto_sports')) ?? '').split(',').filter(Boolean);
   const all = [...new Set([...(auto.length ? auto : FALLBACK_SPORTS), ...extra])];
   return all;
 }

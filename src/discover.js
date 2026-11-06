@@ -34,11 +34,15 @@ export function summarizeSport(events, cfg) {
   return { events: events.length, withPinnacle, comparable, softCounts, positive: signals.length };
 }
 
-/** Rangsor: a pozitív előnyök száma erősen, az összevethető meccsek száma gyengébben számít. */
-export function pickSports(results, { top = 25, minComparable = 2 } = {}) {
+/**
+ * Rangsor: elöl a pozitív előnyt mutató ligák (több pozitív = előrébb), azon belül az összevethető meccsek száma dönt.
+ * Kimarad, ahol kevés az összevethető meccs, vagy a meccsek kevesebb mint felénél van Pinnacle + soft iroda
+ * (pl. NCAA-kosár: sok meccs, kevés összevetés – a körforgásban csak a kreditet vinné).
+ */
+export function pickSports(results, { top = 25, minComparable = 2, minRatio = 0.5 } = {}) {
   return results
-    .filter((r) => r.comparable >= minComparable)
-    .sort((a, b) => (b.positive * 3 + b.comparable) - (a.positive * 3 + a.comparable))
+    .filter((r) => r.comparable >= minComparable && r.comparable / Math.max(1, r.events) >= minRatio)
+    .sort((a, b) => (b.positive - a.positive) || (b.comparable - a.comparable))
     .slice(0, top)
     .map((r) => r.key);
 }

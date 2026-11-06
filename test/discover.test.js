@@ -41,13 +41,15 @@ test('összesítés: Pinnacle + soft együtt = összevethető; pozitív előny s
   assert.ok(r.positive >= 1);
 });
 
-test('rangsor: pozitív előny többet ér, a kevés összevethető kiesik', () => {
+test('rangsor: elöl a pozitív előny, a kevés vagy ritka összevetés kiesik (NCAA-eset)', () => {
   const picked = pickSports([
-    { key: 'a', comparable: 10, positive: 0 },
-    { key: 'b', comparable: 4, positive: 3 },
-    { key: 'c', comparable: 1, positive: 5 },
-  ], { top: 5 });
-  assert.deepEqual(picked, ['b', 'a']);
+    { key: 'mls', events: 15, comparable: 15, positive: 0 },
+    { key: 'superettan', events: 8, comparable: 8, positive: 4 },
+    { key: 'bundesliga', events: 6, comparable: 6, positive: 3 },
+    { key: 'ncaab', events: 59, comparable: 16, positive: 0 },
+    { key: 'tiny', events: 1, comparable: 1, positive: 5 },
+  ], { top: 10 });
+  assert.deepEqual(picked, ['superettan', 'bundesliga', 'mls']);
 });
 
 test('körforgás: folytatja, ahol abbahagyta, és körbeér', () => {
