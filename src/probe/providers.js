@@ -20,6 +20,8 @@ export async function getJson(url, headers = {}, fetchImpl = fetch) {
 }
 
 const SPORT = (s) => String(s ?? '').toLowerCase();
+/** Kezdési-idő tűrés percben: teniszben (és e-sportban) a meccsek egymás után jönnek, a források órákkal eltérhetnek. */
+export const timeTolerance = (sport) => (/tennis|esport|e-sport|table tennis/.test(SPORT(sport)) ? 6 * 60 : 30);
 const near = (a, b, tol = 0.03) => a != null && b != null && Math.abs(Number(a) - Number(b)) <= tol;
 
 // ---------------- pinnapi ----------------
@@ -47,7 +49,7 @@ export function pinnapiEvents(json) {
 }
 
 export function findPinnapiEvent(events, sig) {
-  return bestMatch(events, sig, (e) => ({ home: e.home, away: e.away, startAt: e.starts }));
+  return bestMatch(events, sig, (e) => ({ home: e.home, away: e.away, startAt: e.starts }), timeTolerance(sig.sport));
 }
 
 /** A jelzés piacának Pinnacle-oddsai a pinnapi eseményből (periods.num_0). null, ha nincs ilyen vonal. */
@@ -143,7 +145,7 @@ export function findOddspapiFixture(fixtures, sig) {
   return bestMatch(list, sig, (f) => [
     { home: f.participant1Name, away: f.participant2Name, startAt: f.startTime },
     { home: f.participant1ShortName, away: f.participant2ShortName, startAt: f.startTime },
-  ]);
+  ], timeTolerance(sig.sport));
 }
 
 /** Egy iroda összes (aktív) ára egy fixture odds-válaszából: [{ price, market, outcome, changedAt }] */

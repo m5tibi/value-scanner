@@ -8,7 +8,7 @@
 
 import {
   getJson, pinnapiSportId, pinnapiEvents, findPinnapiEvent, pinnapiPrices, pinnapiFind,
-  oddspapiSportId, tippmixSlugs, bookList, findSlug, findOddspapiFixture, oddspapiPrices, matchPrice,
+  oddspapiSportId, tippmixSlugs, bookList, findSlug, timeTolerance, findOddspapiFixture, oddspapiPrices, matchPrice,
 } from './providers.js';
 
 const SHARP = /^(pinnacle|betinasia)$/i;
@@ -138,8 +138,9 @@ export function makeProbe({ env, db, log, fetchImpl = fetch }) {
     const meta = await opMeta();
     const sportId = oddspapiSportId(meta.sports, sig.sport);
     if (!sportId) return { found: false, error: `sportId nem található: ${sig.sport}` };
-    const from = new Date(sig.startAt.getTime() - 3 * 3600e3).toISOString().slice(0, 19) + 'Z';
-    const to = new Date(sig.startAt.getTime() + 3 * 3600e3).toISOString().slice(0, 19) + 'Z';
+    const w = Math.max(3, timeTolerance(sig.sport) / 60) * 3600e3;
+    const from = new Date(sig.startAt.getTime() - w).toISOString().slice(0, 19) + 'Z';
+    const to = new Date(sig.startAt.getTime() + w).toISOString().slice(0, 19) + 'Z';
     let calls = 0;
     const list = await cached(`op_fx_${sportId}_${from.slice(0, 13)}`, 15 * 60e3, async () => {
       calls++;

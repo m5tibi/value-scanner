@@ -178,3 +178,10 @@ Pinnacle:
   assert.ok(logs.some((l) => /magyar irodák: .*Vegas\.hu/.test(l)));
   assert.ok(!logs.some((l) => /magyar irodák: .*LeoVegas/.test(l)));
 });
+
+test('tenisz: a kezdési idő több órával is eltérhet a források között', () => {
+  const sig = { sport: 'Tennis', home: 'Svrcina, Dalibor', away: 'Piros, Zsombor', startAt: new Date('2026-11-06T10:00:00Z') };
+  const events = [{ event_id: 7, home: 'Dalibor Svrcina', away: 'Zsombor Piros', starts: '2026-11-06T13:30:00Z' }];
+  assert.equal(findPinnapiEvent(events, sig)?.event_id, 7);
+  assert.equal(findPinnapiEvent(events, { ...sig, sport: 'Soccer' }), null); // focinál marad a 30 perc
+});
