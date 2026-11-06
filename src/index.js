@@ -134,6 +134,17 @@ async function reportOnce({ db, notify }, days = 30) {
     `ℹ️ A CLV a legfontosabb szám: ha tartósan pozitív, a jelzések valódi előnyt mutatnak.`,
   ];
   await notify(lines.join('\n'));
+
+  // Adatforrás-teszt (ha fut): külön üzenetben
+  try {
+    const { rows } = await db.pool.query(`select * from probe_results order by created_at`);
+    if (rows.length) {
+      const { probeSummary, probeTelegram } = await import('./probe/report.js');
+      await notify(probeTelegram(probeSummary(rows)));
+    }
+  } catch (e) {
+    if (!/probe_results/.test(e.message)) log('Probe-riport hiba:', e.message);
+  }
 }
 
 /** Egy kör: mindig szkennel; elszámol, ha letelt SETTLE_INTERVAL_MIN; riportot küld naponta egyszer 9:00 után. */

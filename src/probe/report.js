@@ -1,17 +1,17 @@
-// Adatforrás-teszt összesítése:  node --env-file=.env src/probe/report.js   (npm run probe:report)
-// Csak az adatbázist olvassa (Telegramhoz nem nyúl), így a saját gépen is futtatható, miközben a figyelő a Renderen megy.
+// Adatforrás-teszt összesítése.
+//   node src/probe/report.js              -> kiírja (Render Shell / saját gép: npm run probe:report)
+//   node src/probe/report.js --telegram   -> elküldi a Telegram-botodon is
+// Csak az adatbázist olvassa; a szkenner napi riportja is elküldi (index.js).
 
 import pg from 'pg';
-
-const env = Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, typeof v === 'string' ? v.replace(/\s+#.*$/, '').trim() : v]));
-if (!env.DATABASE_URL) { console.error('Nincs DATABASE_URL'); process.exit(1); }
-const ssl = /localhost|127\.0\.0\.1/.test(env.DATABASE_URL) ? false : { rejectUnauthorized: false };
-const pool = new pg.Pool({ connectionString: env.DATABASE_URL, ssl });
+import { pathToFileURL } from 'node:url';
 
 const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '–');
 
-const { rows } = await pool.query(`select * from probe_results order by created_at`);
-if (!rows.length) { console.log('Még nincs teszteredmény.'); process.exit(0); }
+export function probeSummary(rows) {
+const out = [];
+const console = { log: (x = '') => out.push(x) };
+if (!rows.length) return 'Még nincs teszteredmény.';
 
 console.log(`Teszteredmények: ${rows.length} sor (${rows[0].created_at.toLocaleString('hu-HU')} – ${rows.at(-1).created_at.toLocaleString('hu-HU')})\n`);
 
@@ -56,4 +56,39 @@ for (const provider of ['pinnapi', 'oddspapi']) for (const kind of ['oh', 'sf'])
   if (errs.length) console.log(`  Hibák: ${errs.join(' | ')}`);
   console.log('');
 }
-await pool.end();
+return out.join('\n').trimEnd();
+}
+
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+/** Telegram-üzenet (HTML) a riportból; a 4096 karakteres korlát miatt vágva. */
+export function probeTelegram(text) {
+  const t = text.length > 3800 ? `${text.slice(0, 3800)}\n…` : text;
+  return `🔎 <b>Adatforrás-teszt</b> (pinnapi / OddsPapi)\n<pre>${esc(t)}</pre>`;
+}
+
+async function cli() {
+  const env = Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, typeof v === 'string' ? v.replace(/\s+#.*$/, '').trim() : v]));
+  if (!env.DATABASE_URL) { console.error('Nincs DATABASE_URL (a Render Shellben a szolgáltatás változói elérhetők; saját gépen: npm run probe:report)'); process.exit(1); }
+  console.log('Adatbázis lekérdezése…');
+  const ssl = /localhost|127\.0\.0\.1/.test(env.DATABASE_URL) ? false : { rejectUnauthorized: false };
+  const pool = new pg.Pool({ connectionString: env.DATABASE_URL, ssl, connectionTimeoutMillis: 20_000 });
+  const timer = setTimeout(() => { console.error('Nincs válasz az adatbázistól 30 mp alatt – ellenőrizd a DATABASE_URL-t.'); process.exit(1); }, 30_000);
+  try {
+    const { rows } = await pool.query(`select * from probe_results order by created_at`);
+    const text = probeSummary(rows);
+    console.log(text);
+    if (process.argv.includes('--telegram') && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+      const { makeNotifier } = await import('../telegram.js');
+      await makeNotifier({ token: env.TELEGRAM_BOT_TOKEN, chatId: env.TELEGRAM_CHAT_ID })(probeTelegram(text));
+      console.log('Elküldve Telegramon.');
+    }
+  } catch (e) {
+    console.error('Hiba:', e.message);
+    process.exitCode = 1;
+  } finally {
+    clearTimeout(timer);
+    await pool.end().catch(() => {});
+  }
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) await cli();
