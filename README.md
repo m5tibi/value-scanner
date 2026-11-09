@@ -194,3 +194,12 @@ megkeresi ugyanazt a meccset az adott API-ban, összeveti a Pinnacle- (és OddsP
   rá eső részét költi el; a meccs nélküli ligák ingyenesek, azokat csak átugorja.
 - A kredit hívásonként fogy, nem meccsenként, ezért érdemes hosszú ablakot (`LOOKAHEAD_HOURS=24`) és sok soft irodát
   (max. 9 + Pinnacle = 1 régió) használni.
+
+## Nyilvános csatorna: Mondom a Tutit! · Value (v0.11)
+
+Ha a szkenner környezetében meg van adva a `PUBLIC_CHAT_ID`, minden új jelzés a privát csatorna mellett a nyilvános
+(előfizetői) csatornába is kimegy: arculattal, sorszámmal (#id), liga-névvel, minimum odds-szal és negyed-Kelly szerinti
+téttel egységben – irodanév nélkül. Ha egy kiküldött tippre később jobb odds jön, azt is jelzi (🔔).
+
+Minden nap `PUBLIC_DAILY_AT` (alap 09:00) után napi eredményposzt megy ki: az előző nap tippjei (nyert/vesztett, eredmény),
+napi mérleg 1 egységes tétekkel, és a rendszer utolsó 30 napjának ROI-ja és CLV-je. Kézzel: `node src/index.js --public-daily`.

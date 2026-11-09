@@ -39,6 +39,17 @@ export function loadConfig(rawEnv = process.env) {
     discoverEveryDays: num(env.DISCOVER_EVERY_DAYS, 7),
     discoverGroups: list(env.DISCOVER_GROUPS, 'Soccer,Basketball,Ice Hockey,Handball,Tennis'),
 
+    // Nyilvános (előfizetői) csatorna – üres PUBLIC_CHAT_ID = kikapcsolva
+    publicChatId: env.PUBLIC_CHAT_ID || '',
+    publicBotToken: env.PUBLIC_BOT_TOKEN || env.TELEGRAM_BOT_TOKEN || '',
+    publicMinEdge: num(env.PUBLIC_MIN_EDGE, 0),         // ennél kisebb előnyt nem küld ki nyilvánosan (0 = mint MIN_EDGE)
+    publicStake: {
+      unitPct: num(env.PUBLIC_UNIT_PCT, 1),
+      kellyFraction: num(env.PUBLIC_KELLY_FRACTION, 0.25),
+      maxUnits: num(env.PUBLIC_MAX_UNITS, 3),
+    },
+    publicDailyAt: env.PUBLIC_DAILY_AT || '09:00',
+
     // Követő értesítések
     improveMinDelta: num(env.IMPROVE_MIN_DELTA, 0.02),   // ennyivel nagyobb előny kell a 🔔-hoz
     improveMax: num(env.IMPROVE_MAX, 2),                // kimenetelenként legfeljebb ennyi 🔔

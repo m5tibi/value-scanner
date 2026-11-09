@@ -26,7 +26,7 @@ export function makeDb(databaseUrl) {
       const r = await pool.query(
         `insert into value_signals (${cols.join(',')}) values (${ph})
          on conflict (event_id, market, group_key, outcome_name) do nothing returning id`, vals);
-      return r.rowCount > 0;
+      return r.rowCount > 0 ? Number(r.rows[0].id) : null; // az új jelzés azonosítója (igaz-szerű), vagy null
     },
 
     /** A még el nem kezdődött jelzéseknél frissíti a "záró" Pinnacle-adatot és a CLV-t. */
@@ -51,6 +51,23 @@ export function makeDb(databaseUrl) {
       const x = r.rows[0];
       return x && { id: x.id, odds: x.notified_odds == null ? null : Number(x.notified_odds),
         edge: x.notified_edge == null ? null : Number(x.notified_edge), book: x.notified_book, count: x.improved_count };
+    },
+
+    async markPublic(id, stake) {
+      await pool.query(`update value_signals set public_posted_at = now(), public_stake = $2 where id = $1`, [id, stake]);
+    },
+
+    async isPublic(id) {
+      const r = await pool.query(`select public_posted_at from value_signals where id = $1`, [id]);
+      return !!r.rows[0]?.public_posted_at;
+    },
+
+    /** A [start, end) között kezdődött, nyilvánosan kiküldött jelzések. */
+    async publicSignalsBetween(start, end) {
+      const r = await pool.query(
+        `select * from value_signals where public_posted_at is not null
+           and commence_time >= $1 and commence_time < $2 order by commence_time, id`, [start, end]);
+      return r.rows;
     },
 
     async markImproved(id, s) {

@@ -179,3 +179,7 @@ create table if not exists probe_results (
   raw           jsonb
 );
 alter table probe_results enable row level security;
+
+-- Nyilvános (előfizetői) csatorna: mikor és mekkora javasolt téttel ment ki a jelzés
+alter table value_signals add column if not exists public_posted_at timestamptz;
+alter table value_signals add column if not exists public_stake     numeric;

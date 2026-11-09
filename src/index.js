@@ -14,6 +14,7 @@ import { makeNotifier, formatSignal, bookName } from './telegram.js';
 import { makeDb } from './db.js';
 import { isImprovement, improvedHeader } from './alerts.js';
 import { discoverOnce, discoveryDue, rotate, pickSports } from './discover.js';
+import { formatPublicSignal, formatDailyResults, publicStake, yesterdayRange } from './public.js';
 
 const cfg = loadConfig();
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -60,7 +61,16 @@ function tickAllowance(budget) {
   return Math.max(cfg.markets.length, remaining / ticksLeft);
 }
 
-async function scanOnce({ api, db, notify, budget }) {
+/** Liga-nevek a feltérképezésből (kulcs -> cím), a nyilvános üzenetekhez. */
+async function leagueTitles(db) {
+  try {
+    const saved = JSON.parse((await db.getState('discover_result')) ?? 'null');
+    return Object.fromEntries((saved?.results ?? []).map((r) => [r.key, r.title]));
+  } catch { return {}; }
+}
+
+async function scanOnce({ api, db, notify, publicNotify, budget }) {
+  const titles = publicNotify ? await leagueTitles(db) : {};
   const books = [cfg.sharpBook, ...cfg.softBooks].slice(0, 10);
   const allSports = await resolveSports(db);
   // Körforgás: az előző kör után folytatja; a kör kreditkeretéig halad (az üres válasz ingyenes, azt átugorja).
@@ -102,9 +112,14 @@ async function scanOnce({ api, db, notify, budget }) {
 
     for (const snap of sharpSnapshots) await db.updateClosing(snap);
     for (const s of signals) {
-      if (await db.insertSignal(s)) {
+      const newId = await db.insertSignal(s);
+      if (newId) {
         newSignals++;
         await notify(formatSignal(s));
+        if (publicNotify && s.edge >= Math.max(cfg.minEdge, cfg.publicMinEdge)) {
+          const stake = publicStake(s, cfg.publicStake);
+          if (await publicNotify(formatPublicSignal(s, { id: newId, titles, stake: cfg.publicStake }))) await db.markPublic(newId, stake);
+        }
         continue;
       }
       // Már kiküldtük: csak akkor szólunk újra, ha jobb az odds ÉS a friss Pinnacle-ből számolt előny is nőtt.
@@ -113,6 +128,9 @@ async function scanOnce({ api, db, notify, budget }) {
       if (isImprovement(prev, cur, { minDelta: cfg.improveMinDelta, maxCount: cfg.improveMax })) {
         const nice = (x) => ({ ...x, book: bookName(x.book) });
         await notify(`${improvedHeader(nice(prev), nice(cur))}\n\n${formatSignal(s)}`);
+        if (publicNotify && (await db.isPublic(prev.id))) {
+          await publicNotify(formatPublicSignal(s, { id: prev.id, titles, stake: cfg.publicStake, improvedFrom: Number(prev.odds).toFixed(2) }));
+        }
         await db.markImproved(prev.id, s);
         improved++;
       }
@@ -187,7 +205,17 @@ async function reportOnce({ db, notify }, days = 30) {
 }
 
 /** Egy kör: mindig szkennel; elszámol, ha letelt SETTLE_INTERVAL_MIN; riportot küld naponta egyszer 9:00 után. */
-async function tick({ api, db, notify }) {
+/** Napi eredményposzt a nyilvános csatornába (az előző budapesti nap kiküldött tippjei). */
+async function publicDailyOnce({ db, publicNotify }) {
+  const { start, end, label } = yesterdayRange();
+  const rows = await db.publicSignalsBetween(start, end);
+  if (!rows.length) { log('Nyilvános napi poszt: tegnap nem volt kiküldött tipp.'); return; }
+  const { overall } = await db.report(30);
+  await publicNotify(formatDailyResults(rows, overall, { dayLabel: label }));
+  log(`Nyilvános napi poszt elküldve (${rows.length} tipp).`);
+}
+
+async function tick({ api, db, notify, publicNotify }) {
   const budget = await loadBudget(db);
   if (cfg.sports.includes('auto') && (await discoveryDue(db, cfg.discoverEveryDays))) {
     const left = cfg.dailyCreditBudget ? cfg.dailyCreditBudget - budget.used : cfg.discoverMaxCredits;
@@ -197,7 +225,7 @@ async function tick({ api, db, notify }) {
       await budget.save();
     }
   }
-  await scanOnce({ api, db, notify, budget }).catch((e) => log('Szkennelési hiba:', e.message));
+  await scanOnce({ api, db, notify, publicNotify, budget }).catch((e) => log('Szkennelési hiba:', e.message));
 
   const lastSettle = Number(await db.getState('last_settle_ms')) || 0;
   if (Date.now() - lastSettle > cfg.settleIntervalMin * 60e3) {
@@ -211,12 +239,21 @@ async function tick({ api, db, notify }) {
     await reportOnce({ db, notify }).catch((e) => log('Riport-hiba:', e.message));
     await db.setState('last_report_day', day);
   }
+  if (publicNotify && time >= `${cfg.publicDailyAt}:00` && (await db.getState('last_public_daily')) !== day) {
+    // Előtte elszámolunk, hogy a tegnapi meccsek eredménye biztosan meglegyen.
+    await settleOnce({ api, db, budget }).catch((e) => log('Elszámolási hiba:', e.message));
+    await budget.save();
+    await publicDailyOnce({ db, publicNotify }).catch((e) => log('Nyilvános napi poszt hiba:', e.message));
+    await db.setState('last_public_daily', day);
+  }
 }
 
 async function main() {
   const args = new Set(process.argv.slice(2));
   const db = makeDb(cfg.databaseUrl);
   const notify = makeNotifier({ token: cfg.telegramToken, chatId: cfg.telegramChatId, log });
+  // Nyilvános (előfizetői) csatorna: csak ha meg van adva a PUBLIC_CHAT_ID
+  const publicNotify = cfg.publicChatId ? makeNotifier({ token: cfg.publicBotToken, chatId: cfg.publicChatId, log }) : null;
 
   try {
     if (args.has('--migrate')) { await db.migrate(); log('Tábla kész.'); return; }
@@ -235,12 +272,13 @@ async function main() {
 
     // --tick: egy teljes kör (szkennelés + esedékes elszámolás + esedékes riport), majd kilép.
     // Ütemezőhöz (Render Cron Job, GitHub Actions) való; az állapotot az adatbázis tárolja.
-    if (args.has('--tick')) { await tick({ api, db, notify }); return; }
+    if (args.has('--tick')) { await tick({ api, db, notify, publicNotify }); return; }
+    if (args.has('--public-daily')) { if (publicNotify) await publicDailyOnce({ db, publicNotify }); return; }
 
     // Folyamatos futás (Render Background Worker)
     log(`Indulás: ${cfg.sports.includes('auto') ? 'automatikus ligalista' : `${cfg.sports.length} sport`}, piacok: ${cfg.markets.join(',')}, ${cfg.scanIntervalMin} percenként.`);
     for (;;) {
-      await tick({ api, db, notify }).catch((e) => log('Hiba a körben:', e.message));
+      await tick({ api, db, notify, publicNotify }).catch((e) => log('Hiba a körben:', e.message));
       await new Promise((r) => setTimeout(r, cfg.scanIntervalMin * 60e3));
     }
   } finally {
