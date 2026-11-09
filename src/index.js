@@ -52,21 +52,19 @@ async function resolveSports(db) {
   return all;
 }
 
-/** Egy körre jutó kredit: a napi maradék elosztva a nap hátralévő köreire (legalább egy sport). */
-function tickAllowance(budget) {
+/**
+ * Egy körre jutó kredit: a napi maradék elosztva a nap hátralévő köreire. A tört részt "gyűjti" (scan_carry),
+ * és csak akkor költ, ha összegyűlt legalább egy liga ára – így a keret egyenletesen oszlik el a napon,
+ * és este sem fogy el.
+ */
+async function tickAllowance(db, budget) {
   if (!budget || !cfg.dailyCreditBudget) return Infinity;
   const remaining = cfg.dailyCreditBudget - budget.used;
+  if (remaining < cfg.markets.length) return 0;
   const [h, m] = new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Budapest', hour12: false }).split(':').map(Number);
   const ticksLeft = Math.max(1, Math.ceil((24 * 60 - (h * 60 + m)) / cfg.tickMinutes));
-  return Math.max(cfg.markets.length, remaining / ticksLeft);
-}
-
-/** Liga-nevek a feltérképezésből (kulcs -> cím), a nyilvános üzenetekhez. */
-async function leagueTitles(db) {
-  try {
-    const saved = JSON.parse((await db.getState('discover_result')) ?? 'null');
-    return Object.fromEntries((saved?.results ?? []).map((r) => [r.key, r.title]));
-  } catch { return {}; }
+  const carry = (Number(await db.getState('scan_carry')) || 0) + remaining / ticksLeft;
+  return Math.min(carry, remaining);
 }
 
 async function scanOnce({ api, db, notify, publicNotify, budget }) {
@@ -76,7 +74,13 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
   // Körforgás: az előző kör után folytatja; a kör kreditkeretéig halad (az üres válasz ingyenes, azt átugorja).
   const pointer = Number(await db.getState('scan_pointer')) || 0;
   const { batch: ordered } = rotate(allSports, pointer, allSports.length);
-  const allowance = tickAllowance(budget);
+  const allowance = await tickAllowance(db, budget);
+  if (allowance < cfg.markets.length) {
+    // Még nem gyűlt össze egy liga ára: ezt a kört kihagyjuk, a keretet viszük tovább.
+    await db.setState('scan_carry', String(allowance));
+    log(`Kör kihagyva: gyűlik a keret (${allowance.toFixed(2)}/${cfg.markets.length} kredit). Ma: ${budget?.used ?? '?'}/${cfg.dailyCreditBudget}.`);
+    return;
+  }
   let spentThisTick = 0, scanned = 0;
   let newSignals = 0;
   let improved = 0;
@@ -137,6 +141,8 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
     }
   }
   await db.setState('scan_pointer', String((pointer + scanned) % Math.max(1, allSports.length)));
+  // Ha egy körben több liga is fizetős volt, a túlköltést a következő körök "visszafizetik" (negatív carry).
+  if (allowance !== Infinity) await db.setState('scan_carry', String(Math.max(-2 * cfg.markets.length, allowance - spentThisTick)));
   const b = budget && cfg.dailyCreditBudget ? ` Ma: ${budget.used}/${cfg.dailyCreditBudget}.` : '';
   log(`Kör: ${scanned}/${allSports.length} liga, ${spentThisTick} kredit (keret erre a körre: ${allowance === Infinity ? '∞' : allowance.toFixed(1)}).`);
   log(`Szkennelés kész: ${newSignals} új jelzés, ${improved} javulás. Kvóta maradt: ${api.remaining ?? '?'}.${b} Kiszűrve:`, rejectedTotal);
