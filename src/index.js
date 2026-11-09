@@ -251,7 +251,11 @@ async function tick({ api, db, notify, publicNotify }) {
 async function main() {
   const args = new Set(process.argv.slice(2));
   const db = makeDb(cfg.databaseUrl);
-  const notify = makeNotifier({ token: cfg.telegramToken, chatId: cfg.telegramChatId, log });
+  // Biztonsági zár: ha a privát és a nyilvános csatorna ugyanaz, a privát üzenetek (papír-jelzés, riportok)
+  // NEM mennek ki oda, csak a naplóba – így előfizetők elé nem kerülhet belső tartalom.
+  const sameChat = cfg.publicChatId && String(cfg.publicChatId) === String(cfg.telegramChatId);
+  if (sameChat) log('⚠️ TELEGRAM_CHAT_ID = PUBLIC_CHAT_ID: a privát üzenetek csak a naplóba kerülnek. Adj meg külön privát csatornát (pl. a saját Telegram-azonosítódat).');
+  const notify = makeNotifier({ token: cfg.telegramToken, chatId: sameChat ? '' : cfg.telegramChatId, log });
   // Nyilvános (előfizetői) csatorna: csak ha meg van adva a PUBLIC_CHAT_ID
   const publicNotify = cfg.publicChatId ? makeNotifier({ token: cfg.publicBotToken, chatId: cfg.publicChatId, log }) : null;
 
