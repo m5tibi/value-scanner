@@ -33,9 +33,9 @@ services:
       - key: SETTLE_INTERVAL_MIN
         value: "60"
       - key: MIN_QUOTA_REMAINING
-        value: "3000"                # ennyi alatt leáll (a VIP Value Tipsternek is maradjon)
+        value: "1500"                # ennyi alatt leáll (a VIP Value Tipsternek is maradjon)
       - key: DAILY_CREDIT_BUDGET
-        value: "260"                 # kb. 8000 kredit/hó
+        value: "450"                 # kb. 14 000 kredit/hó (a 20K-ból ~6000 a VIP Value Tipsteré)
 
 #  - type: worker
 #    name: value-scanner-worker
