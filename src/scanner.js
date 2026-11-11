@@ -26,7 +26,8 @@ export function scanEvents(events, cfg, now = new Date()) {
   const rejected = {};
   const reject = (why) => { rejected[why] = (rejected[why] ?? 0) + 1; };
   // Diagnosztika: hány meccset/kimenetelt vizsgált, és mi volt a legjobb (akár küszöb alatti) előny.
-  const stats = { events: 0, withSharp: 0, compared: 0, positive: 0, best: null };
+  const stats = { events: 0, withSharp: 0, compared: 0, positive: 0, best: null, byMarket: {} };
+  const mstat = (k) => (stats.byMarket[k] ??= { compared: 0, positive: 0, value: 0, best: null });
 
   for (const ev of events) {
     const minutesToStart = (Date.parse(ev.commence_time) - now.getTime()) / 60000;
@@ -69,6 +70,11 @@ export function scanEvents(events, cfg, now = new Date()) {
           const edge = best.price * fair[i] - 1;
           stats.compared++;
           if (edge > 0) stats.positive++;
+          const ms = mstat(mkKey);
+          ms.compared++;
+          if (edge > 0) ms.positive++;
+          if (edge >= cfg.minEdge) ms.value++;
+          if (ms.best === null || edge > ms.best) ms.best = edge;
           if (!stats.best || edge > stats.best.edge) {
             stats.best = {
               edge, book: best.book, price: best.price, fair_odds: 1 / fair[i],

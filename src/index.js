@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 // Belépési pont.
 //   node src/index.js            -> folyamatos futás (szkennelés + elszámolás + napi riport)
 //   node src/index.js --once     -> egy szkennelés, majd kilép
@@ -52,6 +53,47 @@ async function resolveSports(db) {
   return all;
 }
 
+const budapestDay = (d = new Date()) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' });
+
+/** Napi szkennelési diagnosztika összegzése (value_bot_state: diag_YYYY-MM-DD). */
+async function addDiag(db, x) {
+  const key = `diag_${budapestDay()}`;
+  const d = JSON.parse((await db.getState(key)) ?? 'null') ?? { ticks: 0, skipped: 0, credits: 0, events: 0, compared: 0, positive: 0, signals: 0, byMarket: {}, best: null };
+  for (const k of ['ticks', 'skipped', 'credits', 'events', 'compared', 'positive', 'signals']) d[k] += x[k] ?? 0;
+  for (const [m, v] of Object.entries(x.byMarket ?? {})) {
+    const t = (d.byMarket[m] ??= { compared: 0, positive: 0, value: 0, best: null });
+    t.compared += v.compared; t.positive += v.positive; t.value += v.value;
+    if (v.best !== null && (t.best === null || v.best > t.best)) t.best = v.best;
+  }
+  if (x.best && (!d.best || x.best.edge > d.best.edge)) d.best = { edge: x.best.edge, label: x.best.label, book: x.best.book, price: x.best.price };
+  await db.setState(key, JSON.stringify(d));
+}
+
+/** A tegnapi diagnosztika szövegesen a reggeli riporthoz. */
+async function diagText(db) {
+  const y = budapestDay(new Date(Date.now() - 86_400_000));
+  const d = JSON.parse((await db.getState(`diag_${y}`)) ?? 'null');
+  if (!d) return null;
+  const p = (x) => `${(x * 100).toFixed(1)}%`;
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const lines = [
+    `🔧 <b>Tegnapi szkennelés</b> (${y})`,
+    `${d.ticks} kör (${d.skipped} kihagyva a keret miatt) · ${d.credits} kredit`,
+    `${d.events} meccs · ${d.compared} összevetés · pozitív előny: ${d.positive} · jelzés: ${d.signals}`,
+    ...Object.entries(d.byMarket).map(([m, v]) => `• ${m}: ${v.compared} összevetés, ${v.positive} pozitív, ${v.value} ≥ küszöb, legjobb ${v.best === null ? '–' : p(v.best)}`),
+  ];
+  if (d.best) lines.push(`Legjobb: ${p(d.best.edge)} – ${esc(d.best.label)} @ ${d.best.book} ${d.best.price}`);
+  return lines.join('\n');
+}
+
+/** Liga-nevek a feltérképezésből (kulcs -> cím), a nyilvános üzenetekhez. */
+async function leagueTitles(db) {
+  try {
+    const saved = JSON.parse((await db.getState('discover_result')) ?? 'null');
+    return Object.fromEntries((saved?.results ?? []).map((r) => [r.key, r.title]));
+  } catch { return {}; }
+}
+
 /**
  * Egy körre jutó kredit: a napi maradék elosztva a nap hátralévő köreire. A tört részt "gyűjti" (scan_carry),
  * és csak akkor költ, ha összegyűlt legalább egy liga ára – így a keret egyenletesen oszlik el a napon,
@@ -78,6 +120,7 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
   if (allowance < cfg.markets.length) {
     // Még nem gyűlt össze egy liga ára: ezt a kört kihagyjuk, a keretet viszük tovább.
     await db.setState('scan_carry', String(allowance));
+    await addDiag(db, { skipped: 1 }).catch(() => {});
     log(`Kör kihagyva: gyűlik a keret (${allowance.toFixed(2)}/${cfg.markets.length} kredit). Ma: ${budget?.used ?? '?'}/${cfg.dailyCreditBudget}.`);
     return;
   }
@@ -112,6 +155,11 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
     const { signals, sharpSnapshots, rejected, stats } = scanEvents(events, cfg);
     for (const [k, v] of Object.entries(rejected)) rejectedTotal[k] = (rejectedTotal[k] ?? 0) + v;
     for (const k of ['events', 'withSharp', 'compared', 'positive']) st[k] += stats[k];
+    for (const [m, v] of Object.entries(stats.byMarket ?? {})) {
+      const t = ((st.byMarket ??= {})[m] ??= { compared: 0, positive: 0, value: 0, best: null });
+      t.compared += v.compared; t.positive += v.positive; t.value += v.value;
+      if (v.best !== null && (t.best === null || v.best > t.best)) t.best = v.best;
+    }
     if (stats.best && (!st.best || stats.best.edge > st.best.edge)) st.best = { ...stats.best, sport };
 
     for (const snap of sharpSnapshots) await db.updateClosing(snap);
@@ -141,6 +189,8 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
     }
   }
   await db.setState('scan_pointer', String((pointer + scanned) % Math.max(1, allSports.length)));
+  await addDiag(db, { ticks: 1, credits: spentThisTick, events: st.events, compared: st.compared,
+    positive: st.positive, signals: newSignals, byMarket: st.byMarket, best: st.best }).catch(() => {});
   // Ha egy körben több liga is fizetős volt, a túlköltést a következő körök "visszafizetik" (negatív carry).
   if (allowance !== Infinity) await db.setState('scan_carry', String(Math.max(-2 * cfg.markets.length, allowance - spentThisTick)));
   const b = budget && cfg.dailyCreditBudget ? ` Ma: ${budget.used}/${cfg.dailyCreditBudget}.` : '';
@@ -198,6 +248,10 @@ async function reportOnce({ db, notify }, days = 30) {
   ];
   await notify(lines.join('\n'));
 
+  // Tegnapi szkennelési diagnosztika
+  const dt = await diagText(db).catch(() => null);
+  if (dt) await notify(dt);
+
   // Adatforrás-teszt (ha fut): külön üzenetben
   try {
     const { rows } = await db.pool.query(`select * from probe_results order by created_at`);
@@ -231,7 +285,14 @@ async function tick({ api, db, notify, publicNotify }) {
       await budget.save();
     }
   }
-  await scanOnce({ api, db, notify, publicNotify, budget }).catch((e) => log('Szkennelési hiba:', e.message));
+  await scanOnce({ api, db, notify, publicNotify, budget }).catch(async (e) => {
+    log('Szkennelési hiba:', e.message);
+    const last = Number(await db.getState('last_scan_error_alert')) || 0;
+    if (Date.now() - last > 6 * 3600e3) {
+      await notify(`⚠️ <b>Szkennelési hiba</b>: ${String(e.message).replace(/[&<>]/g, '')}\nA szkenner ilyenkor nem keres jelzést – szólj, és megnézzük.`);
+      await db.setState('last_scan_error_alert', String(Date.now()));
+    }
+  });
 
   const lastSettle = Number(await db.getState('last_settle_ms')) || 0;
   if (Date.now() - lastSettle > cfg.settleIntervalMin * 60e3) {
@@ -296,4 +357,8 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+// Közvetlen futtatáskor indul; tesztből importálva csak a függvényeket adja.
+export { tick, scanOnce };
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}
