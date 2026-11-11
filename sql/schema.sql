@@ -183,3 +183,11 @@ alter table probe_results enable row level security;
 -- Nyilvános (előfizetői) csatorna: mikor és mekkora javasolt téttel ment ki a jelzés
 alter table value_signals add column if not exists public_posted_at timestamptz;
 alter table value_signals add column if not exists public_stake     numeric;
+
+-- Nyilvános sorszám (#1, #2, …) – külön a belső azonosítótól
+alter table value_signals add column if not exists public_no int;
+-- Egyszeri visszamenőleges számozás: a már kiküldött nyilvános tippek a kiküldés sorrendjében kapnak számot
+update value_signals v set public_no = sub.rn
+  from (select id, row_number() over (order by public_posted_at, id) as rn from value_signals where public_posted_at is not null) sub
+ where v.id = sub.id
+   and not exists (select 1 from value_signals where public_no is not null);

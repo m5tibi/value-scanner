@@ -65,7 +65,7 @@ export function formatDailyResults(rows, stats, { dayLabel } = {}) {
   const list = settled.slice(0, 30).map((r) => {
     const sel = describeSelection({ market: r.market, name: r.outcome_name, point: r.point == null ? undefined : Number(r.point) }, r);
     const score = r.home_score != null ? ` (${r.home_score}–${r.away_score})` : '';
-    return `${RESULT_ICON[r.result] ?? '•'} ${esc(r.home_team)} – ${esc(r.away_team)} · ${esc(sel)} @${Number(r.soft_odds).toFixed(2)} → ${RESULT_HU[r.result] ?? r.result}${score}`;
+    return `${RESULT_ICON[r.result] ?? '•'} ${r.public_no ? `#${r.public_no} ` : ''}${esc(r.home_team)} – ${esc(r.away_team)} · ${esc(sel)} @${Number(r.soft_odds).toFixed(2)} → ${RESULT_HU[r.result] ?? r.result}${score}`;
   });
   const out = [
     `📊 <b>${BRAND} – ${esc(dayLabel ?? 'tegnapi')} eredmények</b>`,

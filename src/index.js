@@ -170,7 +170,8 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
         await notify(formatSignal(s));
         if (publicNotify && s.edge >= Math.max(cfg.minEdge, cfg.publicMinEdge)) {
           const stake = publicStake(s, cfg.publicStake);
-          if (await publicNotify(formatPublicSignal(s, { id: newId, titles, stake: cfg.publicStake }))) await db.markPublic(newId, stake);
+          const no = await db.nextPublicNo();
+          if (await publicNotify(formatPublicSignal(s, { id: no, titles, stake: cfg.publicStake }))) await db.markPublic(newId, stake, no);
         }
         continue;
       }
@@ -180,8 +181,9 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
       if (isImprovement(prev, cur, { minDelta: cfg.improveMinDelta, maxCount: cfg.improveMax })) {
         const nice = (x) => ({ ...x, book: bookName(x.book) });
         await notify(`${improvedHeader(nice(prev), nice(cur))}\n\n${formatSignal(s)}`);
-        if (publicNotify && (await db.isPublic(prev.id))) {
-          await publicNotify(formatPublicSignal(s, { id: prev.id, titles, stake: cfg.publicStake, improvedFrom: Number(prev.odds).toFixed(2) }));
+        const pubNo = publicNotify ? await db.isPublic(prev.id) : null;
+        if (pubNo) {
+          await publicNotify(formatPublicSignal(s, { id: pubNo === true ? null : pubNo, titles, stake: cfg.publicStake, improvedFrom: Number(prev.odds).toFixed(2) }));
         }
         await db.markImproved(prev.id, s);
         improved++;

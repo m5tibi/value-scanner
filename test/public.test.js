@@ -37,13 +37,13 @@ test('liga-név és emoji', () => {
 
 test('napi eredményposzt: lista, mérleg, 30 napos CLV', () => {
   const rows = [
-    { ...sig, result: 'nyert', profit: 1.12, home_score: 2, away_score: 1 },
+    { ...sig, result: 'nyert', profit: 1.12, home_score: 2, away_score: 1, public_no: 1 },
     { ...sig, home_team: 'A', away_team: 'B', market: 'h2h', outcome_name: 'A', point: null, sport_key: 'basketball_nba', result: 'vesztett', profit: -1 },
     { ...sig, home_team: 'C', away_team: 'D', result: null, profit: null },
   ];
   const t = formatDailyResults(rows, { elszamolt: 33, profit: -4.74, atlag_clv: 0.031, pozitiv_clv_arany: 0.852 }, { dayLabel: 'november 8-i' });
   assert.match(t, /november 8-i eredmények/);
-  assert.match(t, /✅ Örgryte – Brage · Több mint 2\.5.* @2\.12 → nyert \(2–1\)/);
+  assert.match(t, /✅ #1 Örgryte – Brage · Több mint 2\.5.* @2\.12 → nyert \(2–1\)/);
   assert.match(t, /❌ A – B · A győzelem @2\.12 → vesztett/);
   assert.match(t, /1 nyert \/ 1 vesztett<\/b> · 1 még nincs elszámolva/);
   assert.match(t, /Profit: <b>\+0,12 egység<\/b>/);

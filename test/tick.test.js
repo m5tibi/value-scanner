@@ -19,7 +19,8 @@ function memDb() {
     setState: async (k, v) => { state.set(k, String(v)); },
     insertSignal: async (s) => { if (signals.some((x) => x.event_id === s.event_id && x.market === s.market && x.group_key === s.group_key && x.outcome_name === s.outcome_name)) return null; signals.push({ ...s, id: signals.length + 1 }); return signals.length; },
     getNotified: async () => null, markImproved: async () => {}, updateClosing: async () => {},
-    markPublic: async (id, stake) => { signals[id - 1].public_stake = stake; }, isPublic: async () => false,
+    nextPublicNo: async () => Math.max(0, ...signals.map((x) => x.public_no ?? 0)) + 1,
+    markPublic: async (id, stake, no) => { signals[id - 1].public_stake = stake; signals[id - 1].public_no = no; }, isPublic: async () => null,
     openSportsToSettle: async () => [], report: async () => ({ overall: {} }), publicSignalsBetween: async () => [],
   };
 }
@@ -65,6 +66,8 @@ test('teljes kör: feltérképezés, jelzés a privát ÉS a nyilvános csatorn�
   assert.match(pub.text, /Superettan/);                   // liga-név a feltérképezésből (leagueTitles)
   assert.ok(sent.some((m) => m.chat_id === 'PRIVAT' && /Value \(papír\)/.test(m.text)));
   assert.equal(db.signals[0].public_stake, 0.5);
+  assert.deepEqual(db.signals.map((x) => x.public_no), [1, 2]);             // nyilvános sorszám 1-től
+  assert.match(sent.filter((m) => m.chat_id === 'NYILVANOS')[0].text, /· #1\n/);
   const diag = JSON.parse(db.state.get(`diag_${today}`));
   assert.equal(diag.signals, 2);
   assert.equal(diag.byMarket.totals.value, 2);

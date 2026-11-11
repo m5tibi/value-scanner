@@ -53,13 +53,21 @@ export function makeDb(databaseUrl) {
         edge: x.notified_edge == null ? null : Number(x.notified_edge), book: x.notified_book, count: x.improved_count };
     },
 
-    async markPublic(id, stake) {
-      await pool.query(`update value_signals set public_posted_at = now(), public_stake = $2 where id = $1`, [id, stake]);
+    /** A következő nyilvános sorszám (1-től). */
+    async nextPublicNo() {
+      const r = await pool.query(`select coalesce(max(public_no), 0) + 1 as n from value_signals`);
+      return Number(r.rows[0].n);
     },
 
+    async markPublic(id, stake, no) {
+      await pool.query(`update value_signals set public_posted_at = now(), public_stake = $2, public_no = $3 where id = $1`, [id, stake, no]);
+    },
+
+    /** A jelzés nyilvános sorszáma, vagy null, ha nem ment ki nyilvánosan. */
     async isPublic(id) {
-      const r = await pool.query(`select public_posted_at from value_signals where id = $1`, [id]);
-      return !!r.rows[0]?.public_posted_at;
+      const r = await pool.query(`select public_no, public_posted_at from value_signals where id = $1`, [id]);
+      const x = r.rows[0];
+      return x?.public_posted_at ? (Number(x.public_no) || true) : null;
     },
 
     /** A [start, end) között kezdődött, nyilvánosan kiküldött jelzések. */
