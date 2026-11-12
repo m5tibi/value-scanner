@@ -39,8 +39,13 @@ test('emlékeztető szövege', () => {
 });
 
 test('hendikep 0 érthetően', () => {
-  assert.equal(describeSelection({ market: 'spreads', name: 'Crystal Palace', point: 0 }), 'Crystal Palace ázsiai hendikep 0 (döntetlennél visszajár)');
-  assert.equal(describeSelection({ market: 'spreads', name: 'X', point: -1.5 }), 'X -1.5 (ázsiai hendikep)');
+  const epl = { sport_key: 'soccer_epl' };
+  assert.equal(describeSelection({ market: 'spreads', name: 'Crystal Palace', point: 0 }, epl), 'Crystal Palace – döntetlennél visszajár (ázsiai hendikep 0, rendes játékidő)');
+  assert.equal(describeSelection({ market: 'spreads', name: 'X', point: -1.5 }, epl), 'X -1.5 (ázsiai hendikep, rendes játékidő)');
+  // kosárban pont-hendikep, hosszabbítással (így keresendő az irodáknál)
+  assert.equal(describeSelection({ market: 'spreads', name: 'Charlotte Hornets', point: 6.5 }, { sport_key: 'basketball_nba' }), 'Charlotte Hornets +6.5 (pont-hendikep, hosszabbítással)');
+  assert.equal(describeSelection({ market: 'totals', name: 'Over', point: 2.5 }, epl), 'Több mint 2.5 gól (rendes játékidő)');
+  assert.equal(describeSelection({ market: 'h2h', name: 'Sinner' }, { sport_key: 'tennis_atp_finals' }), 'Sinner nyeri a meccset');
 });
 
 const sig = (odds, startAt = new Date('2026-10-25T14:00:00Z')) => ({

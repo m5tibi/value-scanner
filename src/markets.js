@@ -50,15 +50,30 @@ export function groupOutcomes(market, event) {
 }
 
 /** Ember által olvasható piac-leírás magyarul. */
+/**
+ * A kimenetel magyar leírása, sportág szerint úgy, ahogy a fogadóirodáknál keresni kell:
+ *   foci: rendes játékidő, ázsiai hendikep · kosár/amerikai foci: pont-hendikep, hosszabbítással
+ *   hoki/kézi: gól, hendikep · tenisz: gém
+ */
 export function describeSelection({ market, name, point }, event) {
+  const sport = String(event?.sport_key ?? '').split('_')[0];
+  const sign = (p) => `${Number(p) > 0 ? '+' : ''}${p}`;
+  const unit = { soccer: 'gól', icehockey: 'gól', handball: 'gól', basketball: 'pont', americanfootball: 'pont', baseball: 'futás', tennis: 'gém' }[sport];
+  const time = { soccer: 'rendes játékidő', handball: 'rendes játékidő', basketball: 'hosszabbítással', americanfootball: 'hosszabbítással' }[sport];
+  const tag = (...xs) => { const t = xs.filter(Boolean).join(', '); return t ? ` (${t})` : ''; };
+
   if (market === 'h2h') {
-    if (name === 'Draw') return 'Döntetlen (1X2)';
-    return `${name} győzelem${event?.sport_key?.startsWith('soccer') ? ' (1X2)' : ''}`;
+    if (name === 'Draw') return `Döntetlen${tag(sport === 'soccer' && '1X2', time)}`;
+    if (sport === 'tennis') return `${name} nyeri a meccset`;
+    return `${name} győzelem${tag(sport === 'soccer' && '1X2', time)}`;
   }
-  if (market === 'totals') return `${name === 'Over' ? 'Több mint' : 'Kevesebb mint'} ${point} (összesen)`;
+  if (market === 'totals') return `${name === 'Over' ? 'Több mint' : 'Kevesebb mint'} ${point}${unit ? ` ${unit}` : ''}${tag(!unit && 'összesen', time)}`;
   if (market === 'spreads') {
-    if (Number(point) === 0) return `${name} ázsiai hendikep 0 (döntetlennél visszajár)`;
-    return `${name} ${point > 0 ? '+' : ''}${point} (ázsiai hendikep)`;
+    if (sport === 'soccer') {
+      if (Number(point) === 0) return `${name} – döntetlennél visszajár${tag('ázsiai hendikep 0', time)}`;
+      return `${name} ${sign(point)}${tag('ázsiai hendikep', time)}`;
+    }
+    return `${name} ${sign(point)}${tag(unit ? `${unit}-hendikep` : 'hendikep', time)}`;
   }
   return `${market} ${name} ${point ?? ''}`.trim();
 }

@@ -44,7 +44,7 @@ test('napi eredményposzt: lista, mérleg, 30 napos CLV', () => {
   const t = formatDailyResults(rows, { elszamolt: 33, profit: -4.74, atlag_clv: 0.031, pozitiv_clv_arany: 0.852 }, { dayLabel: 'november 8-i' });
   assert.match(t, /november 8-i eredmények/);
   assert.match(t, /✅ #1 Örgryte – Brage · Több mint 2\.5.* @2\.12 → nyert \(2–1\)/);
-  assert.match(t, /❌ A – B · A győzelem @2\.12 → vesztett/);
+  assert.match(t, /❌ A – B · A győzelem \(hosszabbítással\) @2\.12 → vesztett/);
   assert.match(t, /1 nyert \/ 1 vesztett<\/b> · 1 még nincs elszámolva/);
   assert.match(t, /Profit: <b>\+0,12 egység<\/b>/);
   assert.match(t, /CLV: <b>\+3,1%<\/b> · pozitív CLV: 85,2%/);
