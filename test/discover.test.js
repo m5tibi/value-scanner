@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { candidateSports, summarizeSport, pickSports, rotate } from '../src/discover.js';
+import { candidateSports, summarizeSport, pickSports, rotate, unionPicks } from '../src/discover.js';
 
 const cfg = {
   sharpBook: 'pinnacle', softBooks: ['onexbet', 'marathonbet'], markets: ['h2h'],
@@ -56,4 +56,14 @@ test('körforgás: folytatja, ahol abbahagyta, és körbeér', () => {
   assert.deepEqual(rotate(['a', 'b', 'c', 'd'], 3, 4).batch, ['d', 'a', 'b', 'c']);
   assert.deepEqual(rotate(['a', 'b', 'c'], 1, 2), { batch: ['b', 'c'], next: 0 });
   assert.deepEqual(rotate([], 5, 3), { batch: [], next: 0 });
+});
+
+test('ligalista: az elmúlt 3 hét feltérképezéseinek uniója, a legfrissebb elöl', () => {
+  const now = Date.parse('2026-11-13T12:00:00Z');
+  const hist = [
+    { at: '2026-11-13T12:00:00Z', results: [{ key: 'handball_germany_bundesliga', events: 5, comparable: 5, positive: 8 }, { key: 'soccer_epl', events: 0, comparable: 0, positive: 0 }] },
+    { at: '2026-11-06T12:00:00Z', picked: ['soccer_epl', 'soccer_germany_bundesliga'] },
+    { at: '2026-10-01T12:00:00Z', picked: ['soccer_old_league'] },                          // 3 hétnél régebbi: kimarad
+  ];
+  assert.deepEqual(unionPicks(hist, { now }), ['handball_germany_bundesliga', 'soccer_epl', 'soccer_germany_bundesliga']);
 });

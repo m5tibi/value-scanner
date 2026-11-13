@@ -14,7 +14,7 @@ import { settleSignal, parseScores } from './settle.js';
 import { makeNotifier, formatSignal, bookName } from './telegram.js';
 import { makeDb } from './db.js';
 import { isImprovement, improvedHeader } from './alerts.js';
-import { discoverOnce, discoveryDue, rotate, pickSports } from './discover.js';
+import { discoverOnce, discoveryDue, rotate, pickSports, unionPicks, SEED_PICKS } from './discover.js';
 import { formatPublicSignal, formatDailyResults, publicStake, yesterdayRange } from './public.js';
 
 const cfg = loadConfig();
@@ -45,8 +45,11 @@ async function resolveSports(db) {
   // A rangsort mindig az elmentett feltérképezésből számolja újra (kredit nélkül), így a szabályok változása azonnal érvényes.
   let auto = [];
   try {
+    // Az elmúlt 3 hét feltérképezéseinek uniója (+ az első, még előzmények nélküli feltérképezés választása)
+    const hist = JSON.parse((await db.getState('discover_history')) ?? '[]');
     const saved = JSON.parse((await db.getState('discover_result')) ?? 'null');
-    if (saved?.results?.length) auto = pickSports(saved.results, { top: cfg.discoverTop });
+    if (saved?.results?.length && !hist.some((h) => h.at === saved.at)) hist.push({ at: saved.at, results: saved.results });
+    auto = unionPicks([...hist, SEED_PICKS], { top: cfg.discoverTop });
   } catch { /* régi/hibás állapot */ }
   if (!auto.length) auto = ((await db.getState('auto_sports')) ?? '').split(',').filter(Boolean);
   const all = [...new Set([...(auto.length ? auto : FALLBACK_SPORTS), ...extra])];

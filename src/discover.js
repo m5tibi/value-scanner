@@ -74,6 +74,12 @@ export async function discoverOnce({ api, db, cfg, log, notify, budget, maxCredi
   const picked = pickSports(results, { top });
   const at = new Date().toISOString();
   await db.setState('discover_result', JSON.stringify({ at, spent, results }));
+  // Előzmények (4 hét): a szkenner a legutóbbi néhány feltérképezés UNIÓJÁT figyeli, így egy válogatott-szünet
+  // vagy idényvégi hét nem törli ki a ligákat (a meccs nélküli liga lekérdezése ingyenes).
+  const hist = JSON.parse((await db.getState('discover_history')) ?? '[]')
+    .filter((h) => Date.now() - Date.parse(h.at) < 28 * DAY);
+  hist.push({ at, results: results.map(({ key, title, group, events, comparable, positive }) => ({ key, title, group, events, comparable, positive })) });
+  await db.setState('discover_history', JSON.stringify(hist));
   if (picked.length) await db.setState('auto_sports', picked.join(','));
   await db.setState('discover_at', at);
 
@@ -85,9 +91,33 @@ export async function discoverOnce({ api, db, cfg, log, notify, budget, maxCredi
       return `• <code>${k}</code> — ${r.comparable}/${r.events} összevethető, ${r.positive} pozitív`;
     });
     await notify([`🗺 <b>Liga-feltérképezés kész</b> (${spent} kredit)`,
-      `A szkenner mostantól ezeket a ligákat figyeli felváltva:`, ...lines].join('\n'));
+      `A heti legjobb ligák (a korábbi hetek ligái is a listán maradnak, a meccs nélküliek ingyenesek):`, ...lines].join('\n'));
   }
   return { results, picked, spent };
+}
+
+/** Az első feltérképezés (2026-11-06) választása – az előzmények bevezetésekor ez még nem volt elmentve. */
+export const SEED_PICKS = {
+  at: '2026-11-06T12:00:00Z',
+  picked: ['soccer_fa_cup', 'soccer_sweden_superettan', 'soccer_argentina_primera_division', 'soccer_germany_bundesliga', 'soccer_usa_mls',
+    'soccer_china_superleague', 'soccer_spain_la_liga', 'soccer_japan_j_league', 'basketball_nba', 'soccer_efl_champ', 'soccer_germany_liga3',
+    'soccer_mexico_ligamx', 'soccer_france_ligue_two', 'soccer_italy_serie_a', 'soccer_korea_kleague1', 'soccer_sweden_allsvenskan',
+    'soccer_russia_premier_league', 'soccer_italy_serie_b', 'soccer_brazil_serie_b', 'soccer_france_ligue_one', 'soccer_germany_bundesliga2',
+    'soccer_poland_ekstraklasa', 'soccer_turkey_super_league', 'soccer_australia_aleague', 'soccer_epl', 'soccer_uefa_europa_league'],
+};
+
+/**
+ * Az automatikus ligalista: a legutóbbi feltérképezések (keepDays napon belül) választásainak uniója,
+ * a legfrissebb elöl. A régebbieknél is az aktuális rangsor-szabály dönt (pickSports), ha megvannak az adatok.
+ */
+export function unionPicks(history, { top = 25, keepDays = 21, maxTotal = 50, now = Date.now() } = {}) {
+  const recent = history.filter((h) => now - Date.parse(h.at) < keepDays * DAY).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const out = [];
+  for (const h of recent) {
+    const picks = h.results?.length ? pickSports(h.results, { top }) : (h.picked ?? []);
+    for (const k of picks) if (!out.includes(k)) out.push(k);
+  }
+  return out.slice(0, maxTotal);
 }
 
 /** Kell-e (újra) feltérképezni: még nem volt, vagy régebbi, mint everyDays. */
