@@ -201,3 +201,8 @@ update value_signals v set excluded = true, exclude_reason = 'h2h 2-esélyes vs 
  where not v.excluded and exists (
    select 1 from value_signals o
     where o.event_id = v.event_id and o.market = v.market and o.group_key = v.group_key and o.outcome_name <> v.outcome_name);
+-- 2026-11-13: a kizárt #6/#7 helyére a #8 lép (#6), hogy a csatorna számozása folyamatos legyen.
+-- Csak akkor fut, ha a 6-os és 7-es szám még szabad (nem kizárt jelzés nem használja).
+update value_signals set public_no = 6
+ where public_no = 8 and not excluded
+   and not exists (select 1 from value_signals where public_no in (6, 7) and not excluded);
