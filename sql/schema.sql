@@ -191,3 +191,13 @@ update value_signals v set public_no = sub.rn
   from (select id, row_number() over (order by public_posted_at, id) as rn from value_signals where public_posted_at is not null) sub
  where v.id = sub.id
    and not exists (select 1 from value_signals where public_no is not null);
+
+-- Kizárt (hibás) jelzések: nem számítanak a riportokba és a nyilvános statisztikába
+alter table value_signals add column if not exists excluded boolean not null default false;
+alter table value_signals add column if not exists exclude_reason text;
+-- 2026-11-13: kétesélyes Pinnacle vs. háromesélyes soft h2h (kézilabda) – és minden olyan eset, ahol
+-- ugyanarra a meccsre és piacra két különböző kimenetel is jelzés lett
+update value_signals v set excluded = true, exclude_reason = 'h2h 2-esélyes vs 3-esélyes / mindkét oldal'
+ where not v.excluded and exists (
+   select 1 from value_signals o
+    where o.event_id = v.event_id and o.market = v.market and o.group_key = v.group_key and o.outcome_name <> v.outcome_name);

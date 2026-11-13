@@ -79,3 +79,34 @@ test('1X2 piacon a döntetlen is vizsgálható', () => {
   assert.equal(signals[0].outcome_name, 'Draw');
   assert.equal(signals[0].soft_book, 'marathonbet');
 });
+
+import { groupOutcomes } from '../src/markets.js';
+test('h2h: kétesélyes Pinnacle nem hasonlítható háromesélyes soft piachoz (Füchse–Kiel hiba)', async () => {
+  const { scanEvents } = await import('../src/scanner.js');
+  const now = new Date();
+  const fresh = new Date(now - 30e3).toISOString();
+  const start = new Date(now.getTime() + 20 * 3600e3).toISOString();
+  const ev = { id: 'k1', sport_key: 'handball_germany_bundesliga', home_team: 'Füchse Berlin', away_team: 'THW Kiel', commence_time: start, bookmakers: [
+    { key: 'pinnacle', last_update: fresh, markets: [{ key: 'h2h', last_update: fresh, outcomes: [{ name: 'Füchse Berlin', price: 1.55 }, { name: 'THW Kiel', price: 2.62 }] }] },
+    { key: 'onexbet', last_update: fresh, markets: [{ key: 'h2h', last_update: fresh, outcomes: [{ name: 'Füchse Berlin', price: 1.73 }, { name: 'THW Kiel', price: 2.8 }, { name: 'Draw', price: 9.5 }] }] },
+  ] };
+  assert.deepEqual([...groupOutcomes(ev.bookmakers[0].markets[0], ev).keys()], ['h2h']);
+  assert.deepEqual([...groupOutcomes(ev.bookmakers[1].markets[0], ev).keys()], ['h2h@3']);
+  const cfg = { sharpBook: 'pinnacle', softBooks: ['onexbet'], minEdge: 0.02, maxEdge: 0.10, maxOdds: 5, minOdds: 1.3, minMinutesToStart: 10, maxStalenessSec: 300, devigMethod: 'power' };
+  assert.equal(scanEvents([ev], cfg, now).signals.length, 0);
+});
+
+test('ugyanannak a piacnak két kimenetele egyszerre nem lehet jelzés', async () => {
+  const { scanEvents } = await import('../src/scanner.js');
+  const now = new Date();
+  const fresh = new Date(now - 30e3).toISOString();
+  const start = new Date(now.getTime() + 20 * 3600e3).toISOString();
+  const ev = { id: 'x', sport_key: 'basketball_nba', home_team: 'A', away_team: 'B', commence_time: start, bookmakers: [
+    { key: 'pinnacle', last_update: fresh, markets: [{ key: 'h2h', last_update: fresh, outcomes: [{ name: 'A', price: 1.95 }, { name: 'B', price: 1.95 }] }] },
+    { key: 'onexbet', last_update: fresh, markets: [{ key: 'h2h', last_update: fresh, outcomes: [{ name: 'A', price: 2.08 }, { name: 'B', price: 2.08 }] }] },
+  ] };
+  const cfg = { sharpBook: 'pinnacle', softBooks: ['onexbet'], minEdge: 0.02, maxEdge: 0.10, maxOdds: 5, minOdds: 1.3, minMinutesToStart: 10, maxStalenessSec: 300, devigMethod: 'power' };
+  const r = scanEvents([ev], cfg, now);
+  assert.equal(r.signals.length, 0);
+  assert.equal(r.rejected.mindket_oldal, 1);
+});

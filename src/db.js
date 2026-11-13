@@ -55,7 +55,7 @@ export function makeDb(databaseUrl) {
 
     /** A következő nyilvános sorszám (1-től). */
     async nextPublicNo() {
-      const r = await pool.query(`select coalesce(max(public_no), 0) + 1 as n from value_signals`);
+      const r = await pool.query(`select coalesce(max(public_no), 0) + 1 as n from value_signals where not excluded`);
       return Number(r.rows[0].n);
     },
 
@@ -73,7 +73,7 @@ export function makeDb(databaseUrl) {
     /** A [start, end) között kezdődött, nyilvánosan kiküldött jelzések. */
     async publicSignalsBetween(start, end) {
       const r = await pool.query(
-        `select * from value_signals where public_posted_at is not null
+        `select * from value_signals where public_posted_at is not null and not excluded
            and commence_time >= $1 and commence_time < $2 order by commence_time, id`, [start, end]);
       return r.rows;
     },
@@ -137,7 +137,7 @@ export function makeDb(databaseUrl) {
     },
 
     async report(days = 30) {
-      const where = `where detected_at > now() - ($1 || ' days')::interval`;
+      const where = `where detected_at > now() - ($1 || ' days')::interval and not excluded`;
       const overall = await pool.query(`
         select count(*)::int as jelzes,
                count(*) filter (where settled_at is not null)::int as elszamolt,

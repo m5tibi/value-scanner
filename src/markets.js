@@ -13,7 +13,12 @@ export function groupOutcomes(market, event) {
   const outs = market.outcomes ?? [];
 
   if (market.key === 'h2h') {
-    if (outs.length >= 2) groups.set('h2h', outs.map((o) => ({ name: o.name, point: null, price: o.price })));
+    // A kétesélyes (döntetlen nélküli) és a háromesélyes (döntetlennel) győztes-piac NEM ugyanaz:
+    // külön csoportkulcsot kapnak, így soha nem hasonlítjuk össze őket (2026-11-13: kézi, Füchse–Kiel).
+    if (outs.length >= 2) {
+      const threeWay = outs.length === 3 && outs.some((o) => o.name === 'Draw');
+      groups.set(threeWay ? 'h2h@3' : 'h2h', outs.map((o) => ({ name: o.name, point: null, price: o.price })));
+    }
     return groups;
   }
 

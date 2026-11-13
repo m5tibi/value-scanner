@@ -53,6 +53,7 @@ export function scanEvents(events, cfg, now = new Date()) {
           seen_at: now.toISOString(),
         });
 
+        const candidates = []; // a csoport küszöb feletti kimenetelei (ellentmondás-ellenőrzéshez)
         sharpGroup.forEach((sOut, i) => {
           let best = null;
           for (const book of ev.bookmakers) {
@@ -86,7 +87,7 @@ export function scanEvents(events, cfg, now = new Date()) {
           if (best.price > cfg.maxOdds || best.price < cfg.minOdds) { reject('odds_tartomanyon_kivul'); return; }
           if (minutesToStart < cfg.minMinutesToStart) { reject('kezdeshez_tul_kozel'); return; }
 
-          signals.push({
+          candidates.push({
             event_id: ev.id,
             sport_key: ev.sport_key,
             home_team: ev.home_team,
@@ -109,6 +110,10 @@ export function scanEvents(events, cfg, now = new Date()) {
             detected_at: now.toISOString(),
           });
         });
+        // Ugyanannak a piacnak két (ellentétes) kimenetele egyszerre nem lehet value – ez szinte mindig adathiba
+        // (eltérő piac, elavult ár). Ilyenkor egyiket sem jelezzük.
+        if (candidates.length > 1) { reject('mindket_oldal'); continue; }
+        signals.push(...candidates);
       }
     }
   }
