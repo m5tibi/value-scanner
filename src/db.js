@@ -53,10 +53,19 @@ export function makeDb(databaseUrl) {
         edge: x.notified_edge == null ? null : Number(x.notified_edge), book: x.notified_book, count: x.improved_count };
     },
 
-    /** A következő nyilvános sorszám (1-től). */
+    /** A következő nyilvános sorszám (1-től). A kizárt jelzések számát sem használjuk újra:
+     *  a csatornán egyszer már kiment szám nem ismétlődhet (2026-11-14: kétszer jelent meg a #15). */
     async nextPublicNo() {
-      const r = await pool.query(`select coalesce(max(public_no), 0) + 1 as n from value_signals where not excluded`);
+      const r = await pool.query(`select coalesce(max(public_no), 0) + 1 as n from value_signals`);
       return Number(r.rows[0].n);
+    },
+
+    /** Ment-e már ki nyilvános jelzés erre a meccsre (bármely piacon / kimenetelen)? Ha igen, azt adja vissza. */
+    async publicForEvent(eventId) {
+      const r = await pool.query(
+        `select id, public_no, market, group_key, outcome_name from value_signals
+          where event_id = $1 and public_posted_at is not null and not excluded order by public_posted_at limit 1`, [eventId]);
+      return r.rows[0] ?? null;
     },
 
     async markPublic(id, stake, no) {

@@ -19,6 +19,7 @@ function memDb() {
     setState: async (k, v) => { state.set(k, String(v)); },
     insertSignal: async (s) => { if (signals.some((x) => x.event_id === s.event_id && x.market === s.market && x.group_key === s.group_key && x.outcome_name === s.outcome_name)) return null; signals.push({ ...s, id: signals.length + 1 }); return signals.length; },
     getNotified: async () => null, markImproved: async () => {}, updateClosing: async () => {},
+    publicForEvent: async (eid) => signals.find((x) => x.event_id === eid && x.public_no) ?? null,
     nextPublicNo: async () => Math.max(0, ...signals.map((x) => x.public_no ?? 0)) + 1,
     markPublic: async (id, stake, no) => { signals[id - 1].public_stake = stake; signals[id - 1].public_no = no; }, isPublic: async () => null,
     openSportsToSettle: async () => [], report: async () => ({ overall: {} }), publicSignalsBetween: async () => [],
@@ -58,17 +59,28 @@ test('teljes kör: feltérképezés, jelzés a privát ÉS a nyilvános csatorn�
   const origLog = console.log; console.log = () => {};
   try { await tick({ api, db, notify, publicNotify }); } finally { console.log = origLog; }
 
-  assert.ok(!sent.some((m) => /Szkennelési hiba/.test(m.text)), 'nem lehet szkennelési hiba');
+  assert.ok(!sent.some((m) => /Szkennelési hiba/.test(m.text)), 'nem lehet szkennelési hiba: ' + sent.filter((m) => /hiba/i.test(m.text)).map((m) => m.text).join(' / '));
   assert.equal(db.signals.length, 2);
   const pub = sent.find((m) => m.chat_id === 'NYILVANOS');
   assert.ok(pub, 'a nyilvános csatornába ki kell mennie');
   assert.match(pub.text, /Mondom a Tutit! · Value/);
   assert.match(pub.text, /Superettan/);                   // liga-név a feltérképezésből (leagueTitles)
   assert.ok(sent.some((m) => m.chat_id === 'PRIVAT' && /Value \(papír\)/.test(m.text)));
-  assert.equal(db.signals[0].public_stake, 0.5);
+  assert.equal(db.signals[0].public_stake, 0.25);                       // Superettan = alsóbb osztály -> fél tét
   assert.deepEqual(db.signals.map((x) => x.public_no), [1, 2]);             // nyilvános sorszám 1-től
   assert.match(sent.filter((m) => m.chat_id === 'NYILVANOS')[0].text, /· #1\n/);
   const diag = JSON.parse(db.state.get(`diag_${today}`));
   assert.equal(diag.signals, 2);
   assert.equal(diag.byMarket.totals.value, 2);
+});
+
+test('nyilvános csatorna: meccsenként egy tipp – a második (más kimenetelű) jelzés nem megy ki', async () => {
+  const db = memDb();
+  db.signals.push({ id: 1, event_id: 'e1', market: 'h2h', group_key: 'h2h', outcome_name: 'Draw', public_no: 7 });
+  const sent = [];
+  const notify = async () => true;
+  const publicNotify = async (t) => { sent.push(t); return true; };
+  await tick({ api, db, notify, publicNotify });
+  assert.ok(!sent.some((t) => /Örgryte/.test(t)), 'az e1 meccsre már ment nyilvános tipp, nem mehet újabb');
+  assert.ok(sent.some((t) => /Öster/.test(t)), 'a másik meccs (e2) kimehet');
 });
