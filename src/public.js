@@ -19,10 +19,19 @@ export function leagueName(key, titles = {}) {
   return String(key ?? '').split('_').slice(1).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') || key;
 }
 
-/** Javasolt tét egységben: negyed-Kelly a fair esély és a jelzett odds alapján, legalább 0,25 egység. */
-export function publicStake(s, { kellyFraction = 0.25, maxUnits = 3, unitPct = 1 } = {}) {
+/** Alsóbb osztályú / kupás liga: itt a Pinnacle is kis limittel, pontatlanabbul áraz, a "fair" kevésbé megbízható. */
+export const LOW_TIER_RE = /cup|coupe|pokal|copa|taca|beker|trophy|serie_b|league_one|league_two|national_league|superettan|segunda|liga3|_3_liga|division_2|2_bundesliga|primera_b|championship_2/i;
+export const isLowTier = (sportKey, re = LOW_TIER_RE) => (re instanceof RegExp ? re : new RegExp(re, 'i')).test(String(sportKey ?? ''));
+
+/**
+ * Javasolt tét egységben: negyed-Kelly a fair esély és a jelzett odds alapján, legalább 0,25 egység,
+ * legfeljebb maxUnits. Alsóbb osztályú / kupás meccsen a fele (negyed egységre lefelé kerekítve).
+ */
+export function publicStake(s, { kellyFraction = 0.25, maxUnits = 3, unitPct = 1, lowTierRe = LOW_TIER_RE } = {}) {
   const p = Number(s.fair_prob) || 1 / Number(s.fair_odds);
-  return Math.max(0.25, stakeUnits(p, Number(s.soft_odds), { kellyFraction, maxUnits, unitPct }));
+  let units = stakeUnits(p, Number(s.soft_odds), { kellyFraction, maxUnits, unitPct });
+  if (lowTierRe && isLowTier(s.sport_key, lowTierRe)) units = Math.floor(units / 2 / 0.25) * 0.25;
+  return Math.min(maxUnits, Math.max(0.25, units));
 }
 
 const startText = (t) => new Date(t).toLocaleString('hu-HU', { timeZone: 'Europe/Budapest', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });

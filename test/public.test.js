@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatPublicSignal, formatDailyResults, publicStake, yesterdayRange, leagueName, sportEmoji } from '../src/public.js';
+import { formatPublicSignal, formatDailyResults, publicStake, yesterdayRange, leagueName, sportEmoji, isLowTier } from '../src/public.js';
 
-const sig = {
+const sigBase = {
   sport_key: 'soccer_sweden_superettan', home_team: 'Örgryte', away_team: 'Brage', commence_time: new Date(Date.now() + 125 * 60e3).toISOString(),
   market: 'totals', outcome_name: 'Over', point: 2.5, soft_book: 'onexbet', soft_odds: 2.12, fair_odds: 2.073, fair_prob: 1 / 2.073, edge: 0.023, min_odds: 2.11,
 };
+const sig = sigBase;
 
 test('előfizetői jelzés: arculat, másolható nevek, küszöb, tét egységben, iroda NÉLKÜL', () => {
   const t = formatPublicSignal(sig, { id: 42, titles: { soccer_sweden_superettan: 'Superettan' }, stake: { unitPct: 1 } });
@@ -23,6 +24,7 @@ test('előfizetői jelzés: arculat, másolható nevek, küszöb, tét egységbe
 });
 
 test('tét: negyed-Kelly, legalább 0,25 egység, felső korláttal', () => {
+  const sig = { ...sigBase, sport_key: 'soccer_epl' }; // élvonal: nincs felezés
   assert.equal(publicStake(sig), 0.5);                                        // Kelly 2,0% -> negyed 0,51 -> 0,5 E
   assert.equal(publicStake({ ...sig, soft_odds: 2.3, fair_prob: 0.5 }), 2.75); // Kelly 11,5% -> negyed 2,88 -> 2,75 E
   assert.equal(publicStake({ ...sig, soft_odds: 4.2, fair_prob: 0.243 }), 0.25); // nagyon kicsi Kelly -> minimum 0,25 E
@@ -57,4 +59,16 @@ test('tegnapi nap határai budapesti idő szerint (téli időszámítás)', () =
   assert.equal(label, 'november 8-i');
   const s = yesterdayRange(new Date('2026-07-15T10:00:00Z'));          // nyári idő
   assert.equal(s.start.toISOString(), '2026-07-13T22:00:00.000Z');
+});
+
+test('tét: alsóbb osztály / kupa -> fél tét, és a felső korlát mindig érvényes', () => {
+  const cup = { ...sig, sport_key: 'soccer_france_coupe_de_france', soft_odds: 2.05, fair_prob: 1 / 1.91 };
+  const full = publicStake({ ...cup, sport_key: 'soccer_epl' }, { maxUnits: 3 });
+  const half = publicStake(cup, { maxUnits: 3 });
+  assert.ok(half <= full / 2 + 1e-9 && half >= 0.25, `${half} vs ${full}`);
+  assert.equal(publicStake({ ...sig, sport_key: 'soccer_epl', soft_odds: 2.6, fair_prob: 0.6 }, { maxUnits: 1 }), 1);
+  assert.equal(publicStake(cup, { maxUnits: 1 }) <= 1, true);
+  assert.equal(isLowTier('soccer_brazil_serie_b'), true);
+  assert.equal(isLowTier('soccer_uefa_nations_league'), false);
+  assert.equal(isLowTier('soccer_epl'), false);
 });

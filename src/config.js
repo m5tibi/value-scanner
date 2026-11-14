@@ -46,7 +46,8 @@ export function loadConfig(rawEnv = process.env) {
     publicStake: {
       unitPct: num(env.PUBLIC_UNIT_PCT, 1),
       kellyFraction: num(env.PUBLIC_KELLY_FRACTION, 0.25),
-      maxUnits: num(env.PUBLIC_MAX_UNITS, 3),
+      maxUnits: num(env.PUBLIC_MAX_UNITS, 1),            // nyilvános tipp legfeljebb ennyi egység (2026-11-14: 3 -> 1)
+      lowTierRe: env.PUBLIC_LOW_TIER_RE || undefined,     // alsóbb osztály / kupa: fél tét (alapértelmezés: public.js LOW_TIER_RE)
     },
     publicDailyAt: env.PUBLIC_DAILY_AT || '09:00',
 
