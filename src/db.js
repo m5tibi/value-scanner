@@ -83,7 +83,7 @@ export function makeDb(databaseUrl) {
     async publicSignalsBetween(start, end) {
       const r = await pool.query(
         `select * from value_signals where public_posted_at is not null and not excluded
-           and commence_time >= $1 and commence_time < $2 order by commence_time, id`, [start, end]);
+           and commence_time >= $1 and commence_time < $2 order by public_no nulls last, commence_time, id`, [start, end]);
       return r.rows;
     },
 

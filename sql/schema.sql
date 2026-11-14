@@ -206,3 +206,7 @@ update value_signals v set excluded = true, exclude_reason = 'h2h 2-esélyes vs 
 update value_signals set public_no = 6
  where public_no = 8 and not excluded
    and not exists (select 1 from value_signals where public_no in (6, 7) and not excluded);
+-- 2026-11-14: a #9 (Szlovénia–Svájc) a javítás előtt kapta a számát; #7 lesz, hogy a csatorna folyamatos maradjon.
+update value_signals set public_no = 7
+ where public_no = 9 and not excluded
+   and not exists (select 1 from value_signals where public_no in (7, 8) and not excluded);
