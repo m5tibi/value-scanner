@@ -210,3 +210,10 @@ update value_signals set public_no = 6
 update value_signals set public_no = 7
  where public_no = 9 and not excluded
    and not exists (select 1 from value_signals where public_no in (7, 8) and not excluded);
+-- 2026-11-15: a h2h -> h2h@3 kulcsváltáskor egy már kiküldött tipp újra jelzés lett (Real Sociedad B – Sporting Gijón, #6 = #8).
+-- Az újabb, h2h@3 kulcsú másodpéldány kizárva, ha ugyanarra a meccsre, piacra és kimenetelre már volt 'h2h' jelzés.
+update value_signals v set excluded = true, exclude_reason = 'duplikátum (h2h -> h2h@3 kulcsváltás)'
+ where not v.excluded and v.group_key = 'h2h@3'
+   and exists (select 1 from value_signals o
+                where o.event_id = v.event_id and o.market = v.market and o.outcome_name = v.outcome_name
+                  and o.group_key = 'h2h' and o.id < v.id and not o.excluded);
