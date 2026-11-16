@@ -19,6 +19,7 @@ function memDb() {
     setState: async (k, v) => { state.set(k, String(v)); },
     insertSignal: async (s) => { if (signals.some((x) => x.event_id === s.event_id && x.market === s.market && x.group_key === s.group_key && x.outcome_name === s.outcome_name)) return null; signals.push({ ...s, id: signals.length + 1 }); return signals.length; },
     getNotified: async () => null, markImproved: async () => {}, updateClosing: async () => {},
+    publicForEvent: async (eid) => signals.find((x) => x.event_id === eid && x.public_no) ?? null,
     nextPublicNo: async () => Math.max(0, ...signals.map((x) => x.public_no ?? 0)) + 1,
     markPublic: async (id, stake, no) => { signals[id - 1].public_stake = stake; signals[id - 1].public_no = no; }, isPublic: async () => null,
     openSportsToSettle: async () => [], report: async () => ({ overall: {} }), publicSignalsBetween: async () => [],
@@ -58,14 +59,14 @@ test('teljes kör: feltérképezés, jelzés a privát ÉS a nyilvános csatorn�
   const origLog = console.log; console.log = () => {};
   try { await tick({ api, db, notify, publicNotify }); } finally { console.log = origLog; }
 
-  assert.ok(!sent.some((m) => /Szkennelési hiba/.test(m.text)), 'nem lehet szkennelési hiba');
+  assert.ok(!sent.some((m) => /Szkennelési hiba/.test(m.text)), 'nem lehet szkennelési hiba: ' + sent.filter((m) => /hiba/i.test(m.text)).map((m) => m.text).join(' / '));
   assert.equal(db.signals.length, 2);
   const pub = sent.find((m) => m.chat_id === 'NYILVANOS');
   assert.ok(pub, 'a nyilvános csatornába ki kell mennie');
   assert.match(pub.text, /Mondom a Tutit! · Value/);
   assert.match(pub.text, /Superettan/);                   // liga-név a feltérképezésből (leagueTitles)
   assert.ok(sent.some((m) => m.chat_id === 'PRIVAT' && /Value \(papír\)/.test(m.text)));
-  assert.equal(db.signals[0].public_stake, 0.5);
+  assert.equal(db.signals[0].public_stake, 0.25);                       // Superettan = alsóbb osztály -> fél tét
   assert.deepEqual(db.signals.map((x) => x.public_no), [1, 2]);             // nyilvános sorszám 1-től
   assert.match(sent.filter((m) => m.chat_id === 'NYILVANOS')[0].text, /· #1\n/);
   const diag = JSON.parse(db.state.get(`diag_${today}`));
@@ -73,26 +74,13 @@ test('teljes kör: feltérképezés, jelzés a privát ÉS a nyilvános csatorn�
   assert.equal(diag.byMarket.totals.value, 2);
 });
 
-test('nyilvános szűrő: 1,50 alatti odds csak privátba megy', async () => {
+test('nyilvános csatorna: meccsenként egy tipp – a második (más kimenetelű) jelzés nem megy ki', async () => {
   const db = memDb();
-  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' });
-  await db.setState('last_report_day', today);
-  await db.setState('last_public_daily', today);
+  db.signals.push({ id: 1, event_id: 'e1', market: 'h2h', group_key: 'h2h', outcome_name: 'Draw', public_no: 7 });
   const sent = [];
-  const fetchImpl = async (url, opts) => { sent.push(JSON.parse(opts.body)); return new Response('{"ok":true}', { status: 200 }); };
-  const quiet = { log() {}, sleep: async () => {} };
-  const fav = { ...ev, id: 'f1', bookmakers: [
-    { key: 'pinnacle', last_update: fresh, markets: [{ key: 'totals', last_update: fresh, outcomes: [{ name: 'Over', point: 2.5, price: 1.24 }, { name: 'Under', point: 2.5, price: 4.6 }] }] },
-    { key: 'onexbet', last_update: fresh, markets: [{ key: 'totals', last_update: fresh, outcomes: [{ name: 'Over', point: 2.5, price: 1.33 }, { name: 'Under', point: 2.5, price: 3.5 }] }] },
-  ] };
-  const api2 = { ...api, async getOdds(sport, { markets }) { if (sport !== 'soccer_sweden_superettan') { this.lastCost = 0; return []; } this.lastCost = markets.length; return [fav, ev2]; } };
-  const origLog = console.log; console.log = () => {};
-  try {
-    await tick({ api: api2, db, notify: makeNotifier({ token: 't', chatId: 'PRIVAT', fetchImpl, ...quiet }), publicNotify: makeNotifier({ token: 't', chatId: 'NYILVANOS', fetchImpl, ...quiet }) });
-  } finally { console.log = origLog; }
-  const pub = sent.filter((m) => m.chat_id === 'NYILVANOS');
-  const priv = sent.filter((m) => m.chat_id === 'PRIVAT' && /papír/.test(m.text));
-  assert.equal(priv.length, 2);                       // privátba mindkettő
-  assert.equal(pub.length, 1);                        // nyilvánosba csak a 2,12-es
-  assert.match(pub[0].text, /Odds most: <b>2\.12/);
+  const notify = async () => true;
+  const publicNotify = async (t) => { sent.push(t); return true; };
+  await tick({ api, db, notify, publicNotify });
+  assert.ok(!sent.some((t) => /Örgryte/.test(t)), 'az e1 meccsre már ment nyilvános tipp, nem mehet újabb');
+  assert.ok(sent.some((t) => /Öster/.test(t)), 'a másik meccs (e2) kimehet');
 });
