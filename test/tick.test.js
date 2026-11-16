@@ -84,3 +84,23 @@ test('nyilvános csatorna: meccsenként egy tipp – a második (más kimenetel�
   assert.ok(!sent.some((t) => /Örgryte/.test(t)), 'az e1 meccsre már ment nyilvános tipp, nem mehet újabb');
   assert.ok(sent.some((t) => /Öster/.test(t)), 'a másik meccs (e2) kimehet');
 });
+
+test('nyilvános szűrő: 1,50 alatti odds csak privátba megy (pl. Boston @1,30)', async () => {
+  const db = memDb();
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' });
+  await db.setState('last_report_day', today);
+  await db.setState('last_public_daily', today);
+  const fav = { ...ev, id: 'f1', bookmakers: [
+    { key: 'pinnacle', last_update: fresh, markets: [{ key: 'totals', last_update: fresh, outcomes: [{ name: 'Over', point: 2.5, price: 1.24 }, { name: 'Under', point: 2.5, price: 4.6 }] }] },
+    { key: 'onexbet', last_update: fresh, markets: [{ key: 'totals', last_update: fresh, outcomes: [{ name: 'Over', point: 2.5, price: 1.33 }, { name: 'Under', point: 2.5, price: 3.5 }] }] },
+  ] };
+  const api2 = { ...api, async getOdds(sport, { markets }) { if (sport !== 'soccer_sweden_superettan') { this.lastCost = 0; return []; } this.lastCost = markets.length; return [fav, ev2]; } };
+  const priv = [], pub = [];
+  const origLog = console.log; console.log = () => {};
+  try {
+    await tick({ api: api2, db, notify: async (t) => { priv.push(t); return true; }, publicNotify: async (t) => { pub.push(t); return true; } });
+  } finally { console.log = origLog; }
+  assert.equal(priv.filter((t) => /papír/.test(t)).length, 2);   // privátba mindkettő
+  assert.equal(pub.length, 1);                                    // nyilvánosba csak a 2,12-es
+  assert.match(pub[0], /Odds most: <b>2\.12/);
+});

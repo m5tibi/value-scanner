@@ -43,6 +43,8 @@ export function loadConfig(rawEnv = process.env) {
     publicChatId: env.PUBLIC_CHAT_ID || '',
     publicBotToken: env.PUBLIC_BOT_TOKEN || env.TELEGRAM_BOT_TOKEN || '',
     publicMinEdge: num(env.PUBLIC_MIN_EDGE, 0),         // ennél kisebb előnyt nem küld ki nyilvánosan (0 = mint MIN_EDGE)
+    publicMinOdds: num(env.PUBLIC_MIN_ODDS, 1.5),       // nyilvánosan csak ennél nagyobb odds (nagy esélyes: kevés nyerés, gyorsan eltűnik)
+    publicMaxOdds: num(env.PUBLIC_MAX_ODDS, 5),
     publicStake: {
       unitPct: num(env.PUBLIC_UNIT_PCT, 1),
       kellyFraction: num(env.PUBLIC_KELLY_FRACTION, 0.25),

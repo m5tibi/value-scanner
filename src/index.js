@@ -89,6 +89,12 @@ async function diagText(db) {
   return lines.join('\n');
 }
 
+/** Mehet-e a jelzés a nyilvános csatornába: elég nagy előny és előfizetőnek is értelmes odds-tartomány. */
+function isPublicWorthy(s) {
+  return s.edge >= Math.max(cfg.minEdge, cfg.publicMinEdge)
+    && s.soft_odds >= cfg.publicMinOdds && s.soft_odds <= cfg.publicMaxOdds;
+}
+
 /** Liga-nevek a feltérképezésből (kulcs -> cím), a nyilvános üzenetekhez. */
 async function leagueTitles(db) {
   try {
@@ -171,7 +177,7 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
       if (newId) {
         newSignals++;
         await notify(formatSignal(s));
-        if (publicNotify && s.edge >= Math.max(cfg.minEdge, cfg.publicMinEdge)) {
+        if (publicNotify && isPublicWorthy(s)) {
           // Meccsenként legfeljebb EGY nyilvános tipp: egy későbbi (akár ellentétes) kimenetel nem megy ki,
           // így az előfizetők nem fogadhatnak saját maguk ellen (pl. előbb döntetlen, aztán hazai győzelem).
           const already = await db.publicForEvent(s.event_id);
