@@ -43,11 +43,12 @@ export function loadConfig(rawEnv = process.env) {
     publicChatId: env.PUBLIC_CHAT_ID || '',
     publicBotToken: env.PUBLIC_BOT_TOKEN || env.TELEGRAM_BOT_TOKEN || '',
     publicMinEdge: num(env.PUBLIC_MIN_EDGE, 0),         // ennél kisebb előnyt nem küld ki nyilvánosan (0 = mint MIN_EDGE)
+    publicMinOdds: num(env.PUBLIC_MIN_ODDS, 1.5),       // nyilvánosan csak ennél nagyobb odds (nagy esélyes: kevés nyerés, gyorsan eltűnik)
+    publicMaxOdds: num(env.PUBLIC_MAX_ODDS, 5),
     publicStake: {
       unitPct: num(env.PUBLIC_UNIT_PCT, 1),
       kellyFraction: num(env.PUBLIC_KELLY_FRACTION, 0.25),
-      maxUnits: num(env.PUBLIC_MAX_UNITS, 1),            // nyilvános tipp legfeljebb ennyi egység (2026-11-14: 3 -> 1)
-      lowTierRe: env.PUBLIC_LOW_TIER_RE || undefined,     // alsóbb osztály / kupa: fél tét (alapértelmezés: public.js LOW_TIER_RE)
+      maxUnits: num(env.PUBLIC_MAX_UNITS, 3),
     },
     publicDailyAt: env.PUBLIC_DAILY_AT || '09:00',
 

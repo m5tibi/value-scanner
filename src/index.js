@@ -89,6 +89,12 @@ async function diagText(db) {
   return lines.join('\n');
 }
 
+/** Mehet-e a jelzés a nyilvános csatornába: elég nagy előny és előfizetőnek is értelmes odds-tartomány. */
+function isPublicWorthy(s) {
+  return s.edge >= Math.max(cfg.minEdge, cfg.publicMinEdge)
+    && s.soft_odds >= cfg.publicMinOdds && s.soft_odds <= cfg.publicMaxOdds;
+}
+
 /** Liga-nevek a feltérképezésből (kulcs -> cím), a nyilvános üzenetekhez. */
 async function leagueTitles(db) {
   try {
@@ -171,14 +177,7 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
       if (newId) {
         newSignals++;
         await notify(formatSignal(s));
-        if (publicNotify && s.edge >= Math.max(cfg.minEdge, cfg.publicMinEdge)) {
-          // Meccsenként legfeljebb EGY nyilvános tipp: egy későbbi (akár ellentétes) kimenetel nem megy ki,
-          // így az előfizetők nem fogadhatnak saját maguk ellen (pl. előbb döntetlen, aztán hazai győzelem).
-          const already = await db.publicForEvent(s.event_id);
-          if (already) {
-            log(`Nyilvános jelzés kihagyva – erre a meccsre már ment tipp (#${already.public_no}): ${s.home_team} – ${s.away_team} ${s.market} ${s.outcome_name}`);
-            continue;
-          }
+        if (publicNotify && isPublicWorthy(s)) {
           const stake = publicStake(s, cfg.publicStake);
           const no = await db.nextPublicNo();
           if (await publicNotify(formatPublicSignal(s, { id: no, titles, stake: cfg.publicStake }))) await db.markPublic(newId, stake, no);
