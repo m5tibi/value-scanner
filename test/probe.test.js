@@ -86,7 +86,7 @@ test('teljes folyamat álválaszokkal: mindkét szolgáltató, napi limit, DB-me
     return new Response(JSON.stringify(body), { status: 200 });
   };
   const logs = [];
-  const probe = makeProbe({ env: { PINNAPI_KEY: 'p', ODDSPAPI_KEY: 'o', PROBE_PINNAPI_OH_DAILY: '1', PROBE_ODDSPAPI_OH_DAILY: '1' }, db, log: (...x) => logs.push(x.join(' ')), fetchImpl });
+  const probe = makeProbe({ env: { PROBE: '1', PINNAPI_KEY: 'p', ODDSPAPI_KEY: 'o', PROBE_PINNAPI_OH_DAILY: '1', PROBE_ODDSPAPI_OH_DAILY: '1' }, db, log: (...x) => logs.push(x.join(' ')), fetchImpl });
   // a szüneteket (sleep) itt nem várjuk ki: setTimeout gyorsítása
   const st = globalThis.setTimeout;
   globalThis.setTimeout = (fn, ms, ...r) => st(fn, Math.min(ms, 1), ...r);
@@ -164,7 +164,7 @@ Pinnacle:
     return new Response(JSON.stringify(body), { status: 200 });
   };
   const logs = [];
-  const probe = makeProbe({ env: { PINNAPI_KEY: 'p', ODDSPAPI_KEY: 'o' }, db, log: (...x) => logs.push(x.join(' ')), fetchImpl });
+  const probe = makeProbe({ env: { PROBE: '1', PINNAPI_KEY: 'p', ODDSPAPI_KEY: 'o' }, db, log: (...x) => logs.push(x.join(' ')), fetchImpl });
   const st = globalThis.setTimeout;
   globalThis.setTimeout = (fn, ms, ...r) => st(fn, Math.min(ms, 1), ...r);
   try { probe.enqueue(sf, {}, { channelId: 'c', msgId: 9 }, 'sf'); await new Promise((r) => st(r, 200)); }

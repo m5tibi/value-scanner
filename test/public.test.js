@@ -50,6 +50,16 @@ test('napi eredményposzt: lista, mérleg, 30 napos CLV', () => {
   assert.match(t, /1 nyert \/ 1 vesztett<\/b> · 1 még nincs elszámolva/);
   assert.match(t, /Profit: <b>\+0,12 egység<\/b>/);
   assert.match(t, /CLV: <b>\+3,1%<\/b> · pozitív CLV: 85,2%/);
+  assert.match(t, /A csatorna utolsó 30 napja/);
+  assert.doesNotMatch(t, /összes jelzése/);
+});
+
+test('napi eredményposzt: friss csatornánál az eddigi összes tipp', () => {
+  const t = formatDailyResults([{ ...sig, result: 'nyert', profit: 0.91, public_no: 26 }],
+    { elszamolt: 20, nyert: 11, vesztett: 9, profit: 2.5, atlag_clv: null, since: '2026-11-11T10:00:00Z', days: 30 }, { dayLabel: 'november 16-i' });
+  assert.match(t, /A csatorna eddigi tippjei<\/b> \(november 11 óta\)/);
+  assert.match(t, /20 elszámolt tipp · 11 nyert \/ 9 vesztett · profit \+2,50 egység · ROI \+12,5%/);
+  assert.doesNotMatch(t, /CLV: <b>/);
 });
 
 test('tegnapi nap határai budapesti idő szerint (téli időszámítás)', () => {

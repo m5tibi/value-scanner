@@ -63,7 +63,7 @@ const RESULT_HU = { nyert: 'nyert', fel_nyert: 'félig nyert', vesztett: 'veszte
 
 /**
  * Napi eredményposzt.
- * rows: az adott nap (budapesti idő) nyilvánosan kiküldött jelzései; stats: db.report(30).overall
+ * rows: az adott nap (budapesti idő) nyilvánosan kiküldött jelzései; stats: db.publicReport(30) – csak a csatorna tippjei
  */
 export function formatDailyResults(rows, stats, { dayLabel } = {}) {
   const settled = rows.filter((r) => r.result);
@@ -88,13 +88,18 @@ export function formatDailyResults(rows, stats, { dayLabel } = {}) {
     `Profit: <b>${profit >= 0 ? '+' : ''}${u(profit.toFixed(2))} egység</b> <i>(1 egységes tétekkel)</i>`,
   );
   if (stats && stats.elszamolt) {
+    const head = stats.since
+      ? `📈 <b>A csatorna eddigi tippjei</b> (${new Date(stats.since).toLocaleDateString('hu-HU', { timeZone: 'Europe/Budapest', month: 'long', day: 'numeric' }).replace(/\.$/, '')} óta)`
+      : `📈 <b>A csatorna utolsó ${stats.days ?? 30} napja</b>`;
     out.push(
       ``,
-      `📈 <b>Utolsó 30 nap</b> (a rendszer összes jelzése)`,
-      `${stats.elszamolt} tipp · profit ${stats.profit >= 0 ? '+' : ''}${u(Number(stats.profit).toFixed(2))} egység · ROI ${pct(stats.profit / stats.elszamolt, true)}`,
-      `CLV: <b>${pct(stats.atlag_clv, true)}</b> · pozitív CLV: ${pct(stats.pozitiv_clv_arany)}`,
-      `<i>A CLV azt méri, mennyivel kaptunk jobb oddsot a meccs előtti végső piaci árnál. Ha tartósan pozitív, a tippek valódi előnyt hordoznak – rövid távon a profit ettől még ingadozik.</i>`,
+      head,
+      `${stats.elszamolt} elszámolt tipp · ${stats.nyert ?? 0} nyert / ${stats.vesztett ?? 0} vesztett · profit ${stats.profit >= 0 ? '+' : ''}${u(Number(stats.profit).toFixed(2))} egység · ROI ${pct(stats.profit / stats.elszamolt, true)}`,
     );
+    if (stats.atlag_clv != null) {
+      out.push(`CLV: <b>${pct(stats.atlag_clv, true)}</b> · pozitív CLV: ${pct(stats.pozitiv_clv_arany)}`);
+    }
+    out.push(`<i>A CLV azt méri, mennyivel kaptunk jobb oddsot a meccs előtti végső piaci árnál. Ha tartósan pozitív, a tippek valódi előnyt hordoznak – rövid távon a profit ettől még ingadozik.</i>`);
   }
   return out.join('\n');
 }

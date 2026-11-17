@@ -87,6 +87,27 @@ export function makeDb(databaseUrl) {
       return r.rows;
     },
 
+    /**
+     * A nyilvános csatornában közölt tippek összesítője (1 egységes tétekkel).
+     * Ha a csatorna első tippje 30 napnál frissebb, az eddigi összeset adja (since=true), különben az utolsó 30 napot.
+     */
+    async publicReport(days = 30) {
+      const base = `from value_signals where public_posted_at is not null and not excluded`;
+      const first = await pool.query(`select min(public_posted_at) as t ${base}`);
+      const t = first.rows[0]?.t;
+      const all = !t || new Date(t).getTime() > Date.now() - days * 86400e3;
+      const r = await pool.query(`
+        select count(*)::int as jelzes,
+               count(*) filter (where settled_at is not null)::int as elszamolt,
+               count(*) filter (where result in ('nyert','fel_nyert'))::int as nyert,
+               count(*) filter (where result in ('vesztett','fel_vesztett'))::int as vesztett,
+               coalesce(sum(profit),0)::float as profit,
+               avg(clv)::float as atlag_clv,
+               avg(case when clv is null then null when clv > 0 then 1 else 0 end)::float as pozitiv_clv_arany
+          ${base} ${all ? '' : `and public_posted_at > now() - ($1 || ' days')::interval`}`, all ? [] : [days]);
+      return { ...r.rows[0], since: all ? t : null, days };
+    },
+
     async markImproved(id, s) {
       await pool.query(
         `update value_signals set notified_odds = $2, notified_edge = $3, notified_book = $4,

@@ -270,8 +270,8 @@ async function reportOnce({ db, notify }, days = 30) {
   const dt = await diagText(db).catch(() => null);
   if (dt) await notify(dt);
 
-  // Adatforrás-teszt (ha fut): külön üzenetben
-  try {
+  // Adatforrás-teszt: csak PROBE=1 esetén (a teszt lezárult, alapból nem küldjük)
+  if (process.env.PROBE === '1') try {
     const { rows } = await db.pool.query(`select * from probe_results order by created_at`);
     if (rows.length) {
       const { probeSummary, probeTelegram } = await import('./probe/report.js');
@@ -288,8 +288,8 @@ async function publicDailyOnce({ db, publicNotify }) {
   const { start, end, label } = yesterdayRange();
   const rows = await db.publicSignalsBetween(start, end);
   if (!rows.length) { log('Nyilvános napi poszt: tegnap nem volt kiküldött tipp.'); return; }
-  const { overall } = await db.report(30);
-  await publicNotify(formatDailyResults(rows, overall, { dayLabel: label }));
+  const stats = await db.publicReport(30);
+  await publicNotify(formatDailyResults(rows, stats, { dayLabel: label }));
   log(`Nyilvános napi poszt elküldve (${rows.length} tipp).`);
 }
 

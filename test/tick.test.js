@@ -22,7 +22,7 @@ function memDb() {
     publicForEvent: async (eid) => signals.find((x) => x.event_id === eid && x.public_no) ?? null,
     nextPublicNo: async () => Math.max(0, ...signals.map((x) => x.public_no ?? 0)) + 1,
     markPublic: async (id, stake, no) => { signals[id - 1].public_stake = stake; signals[id - 1].public_no = no; }, isPublic: async () => null,
-    openSportsToSettle: async () => [], report: async () => ({ overall: {} }), publicSignalsBetween: async () => [],
+    openSportsToSettle: async () => [], report: async () => ({ overall: {} }), publicReport: async () => ({}), publicSignalsBetween: async () => [],
   };
 }
 

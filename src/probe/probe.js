@@ -3,7 +3,7 @@
 // Az ingyenes kereteket napi limit védi; a lekérések sorban, szünettel mennek; a jelzés kiküldését nem lassítja.
 //
 // Jelzés-fajták: 'oh' = TPro/Tippmix Value (OddsHub), 'sf' = Value NonStop (surebet: soft iroda + Pinnacle/BetinAsia).
-// Beállítások (env): PINNAPI_KEY, ODDSPAPI_KEY, PROBE=0 (kikapcsolás), napi limitek jelzésszámban:
+// Beállítások (env): PINNAPI_KEY, ODDSPAPI_KEY, PROBE=1 (bekapcsolás; alapból ki van kapcsolva), napi limitek jelzésszámban:
 //   PROBE_PINNAPI_OH_DAILY (20), PROBE_PINNAPI_SF_DAILY (10), PROBE_ODDSPAPI_OH_DAILY (2), PROBE_ODDSPAPI_SF_DAILY (4)
 
 import {
@@ -34,7 +34,7 @@ const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/B
 
 export function makeProbe({ env, db, log, fetchImpl = fetch }) {
   const pinKey = env.PINNAPI_KEY, opKey = env.ODDSPAPI_KEY;
-  if (env.PROBE === '0' || (!pinKey && !opKey)) return null;
+  if (env.PROBE !== '1' || (!pinKey && !opKey)) return null;
   const caps = {
     pinnapi: { oh: Number(env.PROBE_PINNAPI_OH_DAILY ?? 20), sf: Number(env.PROBE_PINNAPI_SF_DAILY ?? 10) },
     oddspapi: { oh: Number(env.PROBE_ODDSPAPI_OH_DAILY ?? 2), sf: Number(env.PROBE_ODDSPAPI_SF_DAILY ?? 4) },
