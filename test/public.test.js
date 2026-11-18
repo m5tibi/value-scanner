@@ -82,3 +82,16 @@ test('tét: alsóbb osztály / kupa -> fél tét, és a felső korlát mindig é
   assert.equal(isLowTier('soccer_uefa_nations_league'), false);
   assert.equal(isLowTier('soccer_epl'), false);
 });
+
+test('válogatottak neve magyarul, klubnevekhez nem nyúl', async () => {
+  const { huName } = await import('../src/names.js');
+  assert.equal(huName('Hungary'), 'Magyarország');
+  assert.equal(huName('Bosnia & Herzegovina'), 'Bosznia-Hercegovina');
+  assert.equal(huName('Hungary U21'), 'Magyarország U21');
+  assert.equal(huName('Real Madrid'), 'Real Madrid');
+  assert.equal(huName('Dinamo Bucharest'), 'Dinamo Bucharest');
+  const t = formatDailyResults([{ ...sig, sport_key: 'soccer_uefa_nations_league', market: 'h2h', home_team: 'Hungary', away_team: 'Northern Ireland',
+    outcome_name: 'Northern Ireland', point: null, soft_odds: 4.5, result: 'vesztett', profit: -1, home_score: 1, away_score: 1, public_no: 33 }],
+    null, { dayLabel: 'november 17-i' });
+  assert.match(t, /#33 Magyarország – Észak-Írország · Észak-Írország győzelem \(1X2, rendes játékidő\)/);
+});

@@ -2,6 +2,7 @@
 // és napi eredményposzt. Irodát nem nevez meg; a tétet egységben adja (negyed-Kelly), az eredményt 1 egységes tétekkel számolja.
 
 import { describeSelection } from './markets.js';
+import { huName } from './names.js';
 import { sportHu, untilHu } from './format.js';
 import { stakeUnits } from './sportfolio/analyze.js';
 
@@ -45,10 +46,10 @@ export function formatPublicSignal(s, { id, titles, stake = {}, improvedFrom } =
   lines.push(
     `💎 <b>${BRAND}</b>${id ? ` · #${id}` : ''}`,
     `${sportEmoji(s.sport_key)} ${esc(sportHu(s.sport_key))} · ${esc(leagueName(s.sport_key, titles))}`,
-    `<code>${esc(s.home_team)}</code> – <code>${esc(s.away_team)}</code>`,
+    `<code>${esc(huName(s.home_team))}</code> – <code>${esc(huName(s.away_team))}</code>`,
     `🕒 ${startText(s.commence_time)}${untilHu(minutes)}`,
     ``,
-    `👉 <b>${esc(describeSelection({ market: s.market, name: s.outcome_name, point: s.point == null ? undefined : Number(s.point) }, s))}</b>`,
+    `👉 <b>${esc(describeSelection({ market: s.market, name: huName(s.outcome_name), point: s.point == null ? undefined : Number(s.point) }, s))}</b>`,
     `Odds most: <b>${Number(s.soft_odds).toFixed(2)}</b> · fair: ${Number(s.fair_odds).toFixed(2)} · előny: <b>${pct(Number(s.edge), true)}</b>`,
     `✅ Csak akkor, ha az odds <b>≥ ${Number(s.min_odds).toFixed(2)}</b>`,
     `💰 Tét: <b>${u(units)} egység</b> <i>(1 egység = a bankroll ${u(stake.unitPct ?? 1)}%-a)</i>`,
@@ -72,9 +73,9 @@ export function formatDailyResults(rows, stats, { dayLabel } = {}) {
   const lost = settled.filter((r) => /vesztett/.test(r.result)).length;
   const profit = settled.reduce((a, r) => a + Number(r.profit ?? 0), 0);
   const list = settled.slice(0, 30).map((r) => {
-    const sel = describeSelection({ market: r.market, name: r.outcome_name, point: r.point == null ? undefined : Number(r.point) }, r);
+    const sel = describeSelection({ market: r.market, name: huName(r.outcome_name), point: r.point == null ? undefined : Number(r.point) }, r);
     const score = r.home_score != null ? ` (${r.home_score}–${r.away_score})` : '';
-    return `${RESULT_ICON[r.result] ?? '•'} ${r.public_no ? `#${r.public_no} ` : ''}${esc(r.home_team)} – ${esc(r.away_team)} · ${esc(sel)} @${Number(r.soft_odds).toFixed(2)} → ${RESULT_HU[r.result] ?? r.result}${score}`;
+    return `${RESULT_ICON[r.result] ?? '•'} ${r.public_no ? `#${r.public_no} ` : ''}${esc(huName(r.home_team))} – ${esc(huName(r.away_team))} · ${esc(sel)} @${Number(r.soft_odds).toFixed(2)} → ${RESULT_HU[r.result] ?? r.result}${score}`;
   });
   const out = [
     `📊 <b>${BRAND} – ${esc(dayLabel ?? 'tegnapi')} eredmények</b>`,
