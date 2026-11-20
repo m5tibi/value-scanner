@@ -3,6 +3,11 @@
 const list = (v, d) => (v ?? d).split(',').map((s) => s.trim()).filter(Boolean);
 const num = (v, d) => (v === undefined || v === '' ? d : Number(String(v).split('#')[0].trim()));
 
+export const GOAL_LEAGUES = [
+  'soccer_australia_aleague', 'soccer_netherlands_eredivisie', 'soccer_germany_bundesliga', 'soccer_belgium_first_div',
+  'soccer_switzerland_superleague', 'soccer_austria_bundesliga', 'soccer_norway_eliteserien', 'soccer_usa_mls',
+].join(',');
+
 export function loadConfig(rawEnv = process.env) {
   // Sor végi "# megjegyzés" levágása (egyes .env-betöltők nem teszik meg).
   const env = Object.fromEntries(Object.entries(rawEnv).map(([k, v]) => [k, typeof v === 'string' ? v.replace(/\s+#.*$/, '').trim() : v]));
@@ -15,12 +20,14 @@ export function loadConfig(rawEnv = process.env) {
     sports: list(env.SPORTS, 'soccer_epl,soccer_uefa_champs_league,basketball_euroleague'),
     markets: list(env.MARKETS, 'h2h,totals,spreads'),
     // Gólgazdag ligák (pl. ausztrál A-League): mindig a listán vannak, és náluk a gólszám-piacot is nézzük.
-    pinnedSports: list(env.PINNED_SPORTS, 'soccer_australia_aleague'),
-    goalSports: list(env.GOAL_SPORTS, 'soccer_australia_aleague'),
+    // Az alapértelmezett lista a meccsenkénti gólátlag alapján (kb. 3 gól felett): A-League, Eredivisie, Bundesliga,
+    // belga, svájci, osztrák, norvég élvonal, MLS. Meccs nélküli liga lekérdezése ingyenes.
+    pinnedSports: list(env.PINNED_SPORTS, GOAL_LEAGUES),
+    goalSports: list(env.GOAL_SPORTS, GOAL_LEAGUES),
     // Alternatív gólvonalak (pl. 5,5 felett = "6+ gól"): meccsenként külön lekérdezés (1 kredit / meccs), ritkítva.
-    altTotalsSports: list(env.ALT_TOTALS_SPORTS, 'soccer_australia_aleague'),
+    altTotalsSports: list(env.ALT_TOTALS_SPORTS, GOAL_LEAGUES),
     altTotalsMaxEvents: num(env.ALT_TOTALS_MAX_EVENTS, 3),     // körönként legfeljebb ennyi meccs
-    altTotalsEveryMin: num(env.ALT_TOTALS_EVERY_MIN, 180),     // egy meccset legfeljebb ennyi percenként kérdezünk újra
+    altTotalsEveryMin: num(env.ALT_TOTALS_EVERY_MIN, 240),     // egy meccset legfeljebb ennyi percenként kérdezünk újra
     sharpBook: env.SHARP_BOOK || 'pinnacle',
     softBooks: list(env.SOFT_BOOKS, 'onexbet,marathonbet'),
 
