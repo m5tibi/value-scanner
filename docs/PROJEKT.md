@@ -29,6 +29,7 @@ Adatbázis: **Supabase Postgres** (`DATABASE_URL`); a séma a `sql/schema.sql` f
 - **Kreditbeosztás:** `DAILY_CREDIT_BUDGET=auto` (a megmaradt havi keretből naponta számolja, `src/budget.js`; a VIP Value Tipster fogyasztását méri), `MIN_QUOTA_REMAINING=1500`, a fel nem használt keret átvihető (`scan_carry`).
 - **Ligaválasztás:** `SPORTS=auto`, hetente felmérjük a ligákat, és az utolsó 21 nap uniója alapján választunk (`src/discover.js`).
 - **Piacok:** a dashboardon `MARKETS=h2h,spreads`.
+- **Gólgazdag ligák (2026-11-20):** `PINNED_SPORTS` (alap: `soccer_australia_aleague`) mindig a ligalistán van; `GOAL_SPORTS`-ban a `totals` piacot is kérjük; `ALT_TOTALS_SPORTS`-ban meccsenként az `alternate_totals` vonalakat is (pl. 5,5 felett = „6+ gól”), körönként max. `ALT_TOTALS_MAX_EVENTS` (3) meccs, meccsenként legfeljebb `ALT_TOTALS_EVERY_MIN` (180) percenként, 1 kredit/meccs. Az alternatív vonalak a `totals` piacba olvadnak (`mergeAltTotals`), így az elszámolás és a szöveg változatlan. Nyitott kérdés: a Pinnacle ad-e `alternate_totals`-t az Odds API-n – a privát log „Alternatív gólvonalak: … kredit” sora és a jelzések mutatják meg.
 - **Minőségmérés:** a fő mutató a **CLV** (a Pinnacle-záróárhoz képest); a papíros ROI ennél kevésbé fontos.
 
 ### Telegram

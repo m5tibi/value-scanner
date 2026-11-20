@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config.js';
 import { OddsApi } from './oddsApi.js';
 import { scanEvents } from './scanner.js';
+import { mergeAltTotals } from './markets.js';
 import { settleSignal, parseScores } from './settle.js';
 import { makeNotifier, formatSignal, bookName } from './telegram.js';
 import { makeDb } from './db.js';
@@ -59,7 +60,7 @@ async function resolveSports(db) {
     auto = unionPicks([...hist, SEED_PICKS], { top: cfg.discoverTop });
   } catch { /* régi/hibás állapot */ }
   if (!auto.length) auto = ((await db.getState('auto_sports')) ?? '').split(',').filter(Boolean);
-  const all = [...new Set([...(auto.length ? auto : FALLBACK_SPORTS), ...extra])];
+  const all = [...new Set([...cfg.pinnedSports, ...(auto.length ? auto : FALLBACK_SPORTS), ...extra])];
   return all;
 }
 
@@ -125,6 +126,42 @@ async function tickAllowance(db, budget) {
   return Math.min(carry, remaining);
 }
 
+/**
+ * Alternatív gólvonalak (pl. 5,5 felett = 6+ gól) a megadott ligák meccseire. Meccsenként 1 kredit, ezért
+ * körönként legfeljebb ALT_TOTALS_MAX_EVENTS meccs, és egy meccset legfeljebb ALT_TOTALS_EVERY_MIN percenként.
+ */
+async function withAltTotals({ api, db, budget, sport, events, books }) {
+  let seen = {};
+  try { seen = JSON.parse((await db.getState('alt_totals_seen')) ?? '{}'); } catch { /* üres */ }
+  const now = Date.now();
+  for (const [k, t] of Object.entries(seen)) if (now - t > 2 * 86_400_000) delete seen[k];
+  const due = events
+    .filter((e) => !seen[e.id] || now - seen[e.id] >= cfg.altTotalsEveryMin * 60_000)
+    .sort((a, b) => Date.parse(a.commence_time) - Date.parse(b.commence_time))
+    .slice(0, cfg.altTotalsMaxEvents);
+  let spent = 0;
+  const byId = new Map(events.map((e) => [e.id, e]));
+  for (const e of due) {
+    if (budget && !budget.canSpend(1)) break;
+    if (api.remaining !== null && api.remaining < cfg.minQuotaRemaining) break;
+    try {
+      const alt = await api.getEventOdds(sport, e.id, { bookmakers: books, markets: ['alternate_totals'] });
+      byId.set(e.id, mergeAltTotals(byId.get(e.id), alt));
+    } catch (err) {
+      log(`Alternatív gólvonal hiba (${sport} ${e.id}): ${err.message}`);
+    } finally {
+      budget?.add(api.lastCost ?? 0);
+      spent += api.lastCost ?? 0;
+      seen[e.id] = now;
+    }
+  }
+  if (due.length) {
+    await db.setState('alt_totals_seen', JSON.stringify(seen));
+    log(`Alternatív gólvonalak: ${sport}, ${due.length} meccs, ${spent} kredit.`);
+  }
+  return { events: events.map((e) => byId.get(e.id) ?? e), spent };
+}
+
 async function scanOnce({ api, db, notify, publicNotify, budget }) {
   const titles = publicNotify ? await leagueTitles(db) : {};
   const books = [cfg.sharpBook, ...cfg.softBooks].slice(0, 10);
@@ -157,8 +194,10 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
       break;
     }
     let events;
+    // Gólgazdag ligákban (GOAL_SPORTS) a fő gólvonalat is kérjük.
+    const markets = cfg.goalSports.includes(sport) ? [...new Set([...cfg.markets, 'totals'])] : cfg.markets;
     try {
-      events = await api.getOdds(sport, { bookmakers: books, markets: cfg.markets, lookaheadHours: cfg.lookaheadHours });
+      events = await api.getOdds(sport, { bookmakers: books, markets, lookaheadHours: cfg.lookaheadHours });
     } catch (e) {
       log(`Hiba (${sport}): ${e.message}`);
       continue;
@@ -167,6 +206,10 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
       budget?.add(api.lastCost ?? 0);
       spentThisTick += api.lastCost ?? 0;
       scanned++;
+    }
+    if (cfg.altTotalsSports.includes(sport) && events?.length) {
+      const r = await withAltTotals({ api, db, budget, sport, events, books });
+      events = r.events; spentThisTick += r.spent;
     }
     const { signals, sharpSnapshots, rejected, stats } = scanEvents(events, cfg);
     for (const [k, v] of Object.entries(rejected)) rejectedTotal[k] = (rejectedTotal[k] ?? 0) + v;

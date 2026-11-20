@@ -47,6 +47,16 @@ export class OddsApi {
     });
   }
 
+  /** Egy meccs oddsai (pl. alternate_totals – ez csak meccsenként kérhető le). Költség: piacok × régiók. */
+  getEventOdds(sport, eventId, { bookmakers, markets }) {
+    return this.#get(`/sports/${sport}/events/${eventId}/odds`, {
+      bookmakers: bookmakers.join(','),
+      markets: markets.join(','),
+      oddsFormat: 'decimal',
+      dateFormat: 'iso',
+    });
+  }
+
   /** Az aktív sportkulcsok listája (ingyenes, nem fogy kredit). */
   getSports() {
     return this.#get('/sports/', {});

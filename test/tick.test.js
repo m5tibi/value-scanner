@@ -104,3 +104,30 @@ test('nyilvános szűrő: 1,50 alatti odds csak privátba megy (pl. Boston @1,30
   assert.equal(pub.length, 1);                                    // nyilvánosba csak a 2,12-es
   assert.match(pub[0], /Odds most: <b>2\.12/);
 });
+
+test('gólgazdag liga (A-League): a fő gólvonal is lekérődik, és az alternatív vonalak meccsenként, ritkítva jönnek', async () => {
+  const db = memDb();
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' });
+  await db.setState('last_report_day', today); await db.setState('last_public_daily', today);
+  await db.setState('discover_at', new Date().toISOString());
+  const au = { ...ev, id: 'au1', sport_key: 'soccer_australia_aleague', home_team: 'Western Sydney Wanderers', away_team: 'Adelaide United' };
+  const calls = { markets: null, event: 0 };
+  const auApi = {
+    remaining: 9000, lastCost: 0,
+    async getSports() { return SPORTS; },
+    async getOdds(sport, { markets }) {
+      if (sport !== 'soccer_australia_aleague') { this.lastCost = 0; return []; }
+      calls.markets = markets; this.lastCost = markets.length; return [au];
+    },
+    async getEventOdds() { calls.event++; this.lastCost = 1; return { id: 'au1', bookmakers: [] }; },
+    async getScores() { return []; },
+  };
+  const notify = async () => true;
+  const origLog = console.log; console.log = () => {};
+  try {
+    await tick({ api: auApi, db, notify, publicNotify: null });
+    await tick({ api: auApi, db, notify, publicNotify: null });   // második kör: a meccset még nem kérdezi újra
+  } finally { console.log = origLog; }
+  assert.ok(calls.markets.includes('totals'), 'a gólgazdag ligában a totals piac is kell');
+  assert.equal(calls.event, 1, 'egy meccs alternatív vonalait ALT_TOTALS_EVERY_MIN-en belül csak egyszer kérdezzük');
+});

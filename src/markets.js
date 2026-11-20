@@ -54,6 +54,29 @@ export function groupOutcomes(market, event) {
   return groups;
 }
 
+/**
+ * Az alternatív gólvonalakat (alternate_totals, pl. 5,5 felett) beolvasztja az irodák "totals" piacába, így
+ * a szkenner, az elszámolás és a szövegezés ugyanúgy kezeli őket, mint a fő vonalat. A fő vonal elsőbbséget élvez.
+ * A bemenetet nem módosítja; az új eseményt adja vissza.
+ */
+export function mergeAltTotals(event, altEvent) {
+  const altByBook = new Map((altEvent?.bookmakers ?? []).map((b) => [b.key, b]));
+  const books = (event.bookmakers ?? []).map((b) => ({ ...b, markets: [...(b.markets ?? [])] }));
+  for (const [key, ab] of altByBook) {
+    const alt = (ab.markets ?? []).find((m) => m.key === 'alternate_totals');
+    if (!alt?.outcomes?.length) continue;
+    let book = books.find((b) => b.key === key);
+    if (!book) { book = { key, title: ab.title, last_update: ab.last_update, markets: [] }; books.push(book); }
+    const idx = book.markets.findIndex((m) => m.key === 'totals');
+    const main = idx >= 0 ? book.markets[idx] : null;
+    const have = new Set((main?.outcomes ?? []).map((o) => `${o.name}@${o.point}`));
+    const extra = alt.outcomes.filter((o) => !have.has(`${o.name}@${o.point}`));
+    const merged = { key: 'totals', last_update: main?.last_update ?? alt.last_update, outcomes: [...(main?.outcomes ?? []), ...extra] };
+    if (idx >= 0) book.markets[idx] = merged; else book.markets.push(merged);
+  }
+  return { ...event, bookmakers: books };
+}
+
 /** Ember által olvasható piac-leírás magyarul. */
 /**
  * A kimenetel magyar leírása, sportág szerint úgy, ahogy a fogadóirodáknál keresni kell:
