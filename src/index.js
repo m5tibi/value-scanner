@@ -15,6 +15,7 @@ import { makeNotifier, formatSignal, bookName } from './telegram.js';
 import { makeDb } from './db.js';
 import { isImprovement, improvedHeader } from './alerts.js';
 import { discoverOnce, discoveryDue, rotate, pickSports, unionPicks, SEED_PICKS } from './discover.js';
+import { planDailyBudget, utcMonth } from './budget.js';
 import { formatPublicSignal, formatDailyResults, publicStake, yesterdayRange } from './public.js';
 
 const cfg = loadConfig();
@@ -28,9 +29,15 @@ async function loadBudget(db) {
   const today = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Budapest' }).slice(0, 10);
   const day = await db.getState('credits_day');
   const used = day === today ? Number(await db.getState('credits_used')) || 0 : 0;
+  let limit = cfg.dailyCreditBudget;
+  if (cfg.dailyCreditAuto) {
+    // Napváltáskor a tegnapi fogyasztást eltesszük (a többi felhasználó fogyasztásának méréséhez)
+    if (day && day !== today) await db.setState('auto_budget_prev_used', String(Number(await db.getState('credits_used')) || 0));
+    ({ budget: limit } = await planDailyBudget(db, { today, cfg, log }));
+  }
   return {
-    today, used,
-    canSpend(cost) { return !cfg.dailyCreditBudget || this.used + cost <= cfg.dailyCreditBudget; },
+    today, used, limit,
+    canSpend(cost) { return !this.limit || this.used + cost <= this.limit; },
     add(cost) { this.used += cost; },
     async save() { await db.setState('credits_day', this.today); await db.setState('credits_used', String(this.used)); },
   };
@@ -109,8 +116,8 @@ async function leagueTitles(db) {
  * és este sem fogy el.
  */
 async function tickAllowance(db, budget) {
-  if (!budget || !cfg.dailyCreditBudget) return Infinity;
-  const remaining = cfg.dailyCreditBudget - budget.used;
+  if (!budget || !budget.limit) return Infinity;
+  const remaining = budget.limit - budget.used;
   if (remaining < cfg.markets.length) return 0;
   const [h, m] = new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Budapest', hour12: false }).split(':').map(Number);
   const ticksLeft = Math.max(1, Math.ceil((24 * 60 - (h * 60 + m)) / cfg.tickMinutes));
@@ -130,7 +137,7 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
     // Még nem gyűlt össze egy liga ára: ezt a kört kihagyjuk, a keretet viszük tovább.
     await db.setState('scan_carry', String(allowance));
     await addDiag(db, { skipped: 1 }).catch(() => {});
-    log(`Kör kihagyva: gyűlik a keret (${allowance.toFixed(2)}/${cfg.markets.length} kredit). Ma: ${budget?.used ?? '?'}/${cfg.dailyCreditBudget}.`);
+    log(`Kör kihagyva: gyűlik a keret (${allowance.toFixed(2)}/${cfg.markets.length} kredit). Ma: ${budget?.used ?? '?'}/${budget?.limit}.`);
     return;
   }
   let spentThisTick = 0, scanned = 0;
@@ -146,7 +153,7 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
       break;
     }
     if (budget && !budget.canSpend(cfg.markets.length)) {
-      log(`Napi kreditkeret elérve (${budget.used}/${cfg.dailyCreditBudget}), szkennelés holnapig szünetel.`);
+      log(`Napi kreditkeret elérve (${budget.used}/${budget.limit}), szkennelés holnapig szünetel.`);
       break;
     }
     let events;
@@ -211,7 +218,7 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
     positive: st.positive, signals: newSignals, byMarket: st.byMarket, best: st.best }).catch(() => {});
   // Ha egy körben több liga is fizetős volt, a túlköltést a következő körök "visszafizetik" (negatív carry).
   if (allowance !== Infinity) await db.setState('scan_carry', String(Math.max(-2 * cfg.markets.length, allowance - spentThisTick)));
-  const b = budget && cfg.dailyCreditBudget ? ` Ma: ${budget.used}/${cfg.dailyCreditBudget}.` : '';
+  const b = budget && budget.limit ? ` Ma: ${budget.used}/${budget.limit}.` : '';
   log(`Kör: ${scanned}/${allSports.length} liga, ${spentThisTick} kredit (keret erre a körre: ${allowance === Infinity ? '∞' : allowance.toFixed(1)}).`);
   log(`Szkennelés kész: ${newSignals} új jelzés, ${improved} javulás. Kvóta maradt: ${api.remaining ?? '?'}.${b} Kiszűrve:`, rejectedTotal);
   if (st.events) {
@@ -296,7 +303,7 @@ async function publicDailyOnce({ db, publicNotify }) {
 async function tick({ api, db, notify, publicNotify }) {
   const budget = await loadBudget(db);
   if (cfg.sports.includes('auto') && (await discoveryDue(db, cfg.discoverEveryDays))) {
-    const left = cfg.dailyCreditBudget ? cfg.dailyCreditBudget - budget.used : cfg.discoverMaxCredits;
+    const left = budget.limit ? budget.limit - budget.used : cfg.discoverMaxCredits;
     if (left >= 20) {
       await discoverOnce({ api, db, cfg, log, notify, budget, maxCredits: Math.min(cfg.discoverMaxCredits, left), groups: cfg.discoverGroups, top: cfg.discoverTop })
         .catch((e) => log('Feltérképezési hiba:', e.message));
@@ -318,6 +325,10 @@ async function tick({ api, db, notify, publicNotify }) {
     await db.setState('last_settle_ms', String(Date.now()));
   }
   await budget.save();
+  if (api.remaining != null) { // az automatikus kerethez
+    await db.setState('quota_remaining', String(api.remaining));
+    await db.setState('quota_remaining_month', utcMonth());
+  }
 
   const [day, time] = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Budapest' }).split(' ');
   if (time >= '09:00:00' && (await db.getState('last_report_day')) !== day) {

@@ -29,8 +29,13 @@ export function loadConfig(rawEnv = process.env) {
     scanIntervalMin: num(env.SCAN_INTERVAL_MIN, 5),
     settleIntervalMin: num(env.SETTLE_INTERVAL_MIN, 60),
     minQuotaRemaining: num(env.MIN_QUOTA_REMAINING, 200),
-    // Napi kreditkeret (budapesti nap szerint). 0 = nincs korlát.
-    dailyCreditBudget: num(env.DAILY_CREDIT_BUDGET, 0),
+    // Napi kreditkeret (budapesti nap szerint). 0 = nincs korlát; "auto" = a megmaradt havi keretből számolja (src/budget.js).
+    dailyCreditAuto: String(env.DAILY_CREDIT_BUDGET ?? '').trim().toLowerCase().startsWith('auto'),
+    dailyCreditBudget: String(env.DAILY_CREDIT_BUDGET ?? '').trim().toLowerCase().startsWith('auto') ? 0 : num(env.DAILY_CREDIT_BUDGET, 0),
+    creditOtherDaily: num(env.CREDIT_OTHER_DAILY, 175),     // a többi felhasználó (VIP Value Tipster) becsült napi fogyasztása
+    dailyCreditMin: num(env.DAILY_CREDIT_MIN, 100),
+    dailyCreditMax: num(env.DAILY_CREDIT_MAX, 1500),
+    dailyCreditFallback: num(env.DAILY_CREDIT_FALLBACK, 450), // ha még nincs kvótaadat
 
     // Automatikus ligalista (SPORTS=auto) és körforgás
     tickMinutes: num(env.TICK_MINUTES, 10),             // a cron gyakorisága (a napi keret elosztásához)

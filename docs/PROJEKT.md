@@ -26,7 +26,7 @@ Adatbázis: **Supabase Postgres** (`DATABASE_URL`); a séma a `sql/schema.sql` f
 - **Éles ár (sharp):** Pinnacle. **Lágy irodák (soft):** `onexbet, marathonbet, betsson, nordicbet, unibet_se, williamhill, sport888, coolbet, tipico_de`.
 - **Reálérték:** a Pinnacle-oddsból vig nélkül (power de-vig). Jelzés akkor megy ki, ha az előny ≥ `MIN_EDGE` (2%). Ha egy csoportban mindkét oldal átmegy a küszöbön, a jelzést elvetjük (`mindket_oldal`). A 2-utas és a 3-utas h2h külön csoport (`h2h` / `h2h@3`).
 - **Tét:** negyed Kelly, 0,25 egységre kerekítve. A nyilvános csatornában **legfeljebb 1 egység**, alsóbb osztályban és kupában fél tét.
-- **Kreditbeosztás:** `DAILY_CREDIT_BUDGET=450`, `MIN_QUOTA_REMAINING=1500`, a fel nem használt keret átvihető (`scan_carry`).
+- **Kreditbeosztás:** `DAILY_CREDIT_BUDGET=auto` (a megmaradt havi keretből naponta számolja, `src/budget.js`; a VIP Value Tipster fogyasztását méri), `MIN_QUOTA_REMAINING=1500`, a fel nem használt keret átvihető (`scan_carry`).
 - **Ligaválasztás:** `SPORTS=auto`, hetente felmérjük a ligákat, és az utolsó 21 nap uniója alapján választunk (`src/discover.js`).
 - **Piacok:** a dashboardon `MARKETS=h2h,spreads`.
 - **Minőségmérés:** a fő mutató a **CLV** (a Pinnacle-záróárhoz képest); a papíros ROI ennél kevésbé fontos.
