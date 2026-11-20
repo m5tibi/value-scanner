@@ -14,6 +14,13 @@ export function loadConfig(rawEnv = process.env) {
 
     sports: list(env.SPORTS, 'soccer_epl,soccer_uefa_champs_league,basketball_euroleague'),
     markets: list(env.MARKETS, 'h2h,totals,spreads'),
+    // Gólgazdag ligák (pl. ausztrál A-League): mindig a listán vannak, és náluk a gólszám-piacot is nézzük.
+    pinnedSports: list(env.PINNED_SPORTS, 'soccer_australia_aleague'),
+    goalSports: list(env.GOAL_SPORTS, 'soccer_australia_aleague'),
+    // Alternatív gólvonalak (pl. 5,5 felett = "6+ gól"): meccsenként külön lekérdezés (1 kredit / meccs), ritkítva.
+    altTotalsSports: list(env.ALT_TOTALS_SPORTS, 'soccer_australia_aleague'),
+    altTotalsMaxEvents: num(env.ALT_TOTALS_MAX_EVENTS, 3),     // körönként legfeljebb ennyi meccs
+    altTotalsEveryMin: num(env.ALT_TOTALS_EVERY_MIN, 180),     // egy meccset legfeljebb ennyi percenként kérdezünk újra
     sharpBook: env.SHARP_BOOK || 'pinnacle',
     softBooks: list(env.SOFT_BOOKS, 'onexbet,marathonbet'),
 
