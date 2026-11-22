@@ -25,7 +25,7 @@ services:
       - key: SPORTS
         value: auto                  # hetente feltérképezi a ligákat (Pinnacle + soft iroda), és ezeket figyeli felváltva
       - key: MARKETS
-        value: totals,spreads
+        value: h2h,spreads,totals     # a dashboardon is ez legyen (a dashboard értéke az irányadó)
       - key: SOFT_BOOKS
         value: onexbet,marathonbet,betsson,nordicbet,unibet_se,williamhill,sport888,coolbet,tipico_de   # max. 9 (+Pinnacle = 1 régió)
       - key: LOOKAHEAD_HOURS
