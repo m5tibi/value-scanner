@@ -186,7 +186,20 @@ export function makeDb(databaseUrl) {
         select case when edge < 0.04 then '2-4%' when edge < 0.07 then '4-7%' else '7-10%' end as sav,
                count(*)::int as n, coalesce(sum(profit),0)::float as profit, avg(clv)::float as atlag_clv
           from value_signals ${where} group by 1 order by 1`, [days]);
-      return { overall: overall.rows[0], bySport: bySport.rows, byEdge: byEdge.rows };
+      const byOdds = await pool.query(`
+        select case when soft_odds < 1.8 then '1,80 alatt' when soft_odds < 2.5 then '1,80–2,49'
+                    when soft_odds < 3.5 then '2,50–3,49' else '3,50 felett' end as sav,
+               min(soft_odds)::float as lo,
+               count(*)::int as n, count(*) filter (where settled_at is not null)::int as elszamolt,
+               coalesce(sum(profit),0)::float as profit, avg(clv)::float as atlag_clv
+          from value_signals ${where} group by 1 order by lo`, [days]);
+      const byMarket = await pool.query(`
+        select case when market = 'h2h' and outcome_name = 'Draw' then 'h2h – döntetlen'
+                    when market = 'h2h' then 'h2h – győzelem' else market end as piac,
+               count(*)::int as n, count(*) filter (where settled_at is not null)::int as elszamolt,
+               coalesce(sum(profit),0)::float as profit, avg(clv)::float as atlag_clv
+          from value_signals ${where} group by 1 order by n desc`, [days]);
+      return { overall: overall.rows[0], bySport: bySport.rows, byEdge: byEdge.rows, byOdds: byOdds.rows, byMarket: byMarket.rows };
     },
 
     /** Sportfolio-jelzés naplózása (üzenet-ID alapján egyszer). */

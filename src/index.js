@@ -17,6 +17,7 @@ import { makeDb } from './db.js';
 import { isImprovement, improvedHeader } from './alerts.js';
 import { discoverOnce, discoveryDue, rotate, pickSports, unionPicks, SEED_PICKS } from './discover.js';
 import { planDailyBudget, utcMonth } from './budget.js';
+import { formatReport } from './report.js';
 import { formatPublicSignal, formatDailyResults, publicStake, yesterdayRange } from './public.js';
 
 const cfg = loadConfig();
@@ -293,27 +294,9 @@ async function settleOnce({ api, db, budget }) {
   log(`Elszámolás kész: ${settled} jelzés.`);
 }
 
-function pct(x) { return x === null || x === undefined ? '–' : `${(x * 100).toFixed(1)}%`; }
 
 async function reportOnce({ db, notify }, days = 30) {
-  const { overall: o, bySport, byEdge } = await db.report(days);
-  const decided = o.nyert + o.vesztett;
-  const lines = [
-    `📊 <b>Papíros value-riport (utolsó ${days} nap)</b>`,
-    `Jelzés: ${o.jelzes} | elszámolt: ${o.elszamolt} | nyert/vesztett: ${o.nyert}/${o.vesztett}` +
-      (decided ? ` (${pct(o.nyert / decided)})` : ''),
-    `Profit: <b>${o.profit.toFixed(2)} egység</b> | ROI: <b>${o.elszamolt ? pct(o.profit / o.elszamolt) : '–'}</b>`,
-    `Átlagos előny jelzéskor: ${pct(o.atlag_elony)}`,
-    `Átlagos CLV: <b>${pct(o.atlag_clv)}</b> | pozitív CLV aránya: ${pct(o.pozitiv_clv_arany)}`,
-    ``,
-    `<b>Előny-sávok</b>`,
-    ...byEdge.map((r) => `${r.sav}: ${r.n} db, profit ${r.profit.toFixed(2)}, CLV ${pct(r.atlag_clv)}`),
-    ``,
-    `<b>Sportágak</b>`,
-    ...bySport.map((r) => `${r.sport_key}: ${r.n} db, profit ${r.profit.toFixed(2)}, CLV ${pct(r.atlag_clv)}`),
-    ``,
-    `ℹ️ A CLV a legfontosabb szám: ha tartósan pozitív, a jelzések valódi előnyt mutatnak.`,
-  ];
+  const lines = formatReport(await db.report(days), days).split('\n');
   await notify(lines.join('\n'));
 
   // Tegnapi szkennelési diagnosztika
