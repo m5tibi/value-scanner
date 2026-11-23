@@ -4,7 +4,7 @@ export function pct(x) { return x === null || x === undefined ? '–' : `${(x * 
 const roi = (r) => (r.elszamolt ? `, ROI ${pct(r.profit / r.elszamolt)}` : '');
 const row = (label, r) => `${label}: ${r.n} db, profit ${Number(r.profit).toFixed(2)}${roi(r)}, CLV ${pct(r.atlag_clv)}`;
 
-export function formatReport({ overall: o, bySport = [], byEdge = [], byOdds = [], byMarket = [] }, days = 30) {
+export function formatReport({ overall: o, bySport = [], byEdge = [], byOdds = [], byMarket = [], bySource = [] }, days = 30) {
   const decided = o.nyert + o.vesztett;
   return [
     `📊 <b>Papíros value-riport (utolsó ${days} nap)</b>`,
@@ -16,6 +16,7 @@ export function formatReport({ overall: o, bySport = [], byEdge = [], byOdds = [
     ``,
     `<b>Előny-sávok</b>`,
     ...byEdge.map((r) => `${r.sav}: ${r.n} db, profit ${r.profit.toFixed(2)}, CLV ${pct(r.atlag_clv)}`),
+    ...(bySource.length > 1 ? [``, `<b>Források</b>`, ...bySource.map((r) => row(r.forras, r))] : []),
     ...(byOdds.length ? [``, `<b>Odds-sávok</b>`, ...byOdds.map((r) => row(r.sav, r))] : []),
     ...(byMarket.length ? [``, `<b>Piacok</b>`, ...byMarket.map((r) => row(r.piac, r))] : []),
     ``,

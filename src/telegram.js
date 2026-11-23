@@ -3,7 +3,7 @@
 import { describeSelection } from './markets.js';
 import { sportHu, untilHu } from './format.js';
 
-const BOOK_NAMES = { onexbet: '1xBet', marathonbet: 'Marathon', pinnacle: 'Pinnacle' };
+const BOOK_NAMES = { onexbet: '1xBet', marathonbet: 'Marathon', pinnacle: 'Pinnacle', tippmixpro: '🇭🇺 TippmixPro' };
 export const bookName = (k) => BOOK_NAMES[k] ?? k;
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 

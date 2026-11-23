@@ -20,12 +20,12 @@ export function makeDb(databaseUrl) {
     async insertSignal(s) {
       const cols = ['event_id', 'sport_key', 'home_team', 'away_team', 'commence_time', 'market', 'group_key',
         'outcome_name', 'point', 'soft_book', 'soft_odds', 'pin_odds', 'pin_margin', 'fair_prob', 'fair_odds',
-        'edge', 'min_odds', 'detected_at', 'notified_odds', 'notified_edge', 'notified_book'];
-      const vals = cols.map((c) => ({ notified_odds: s.soft_odds, notified_edge: s.edge, notified_book: s.soft_book }[c] ?? s[c]));
+        'edge', 'min_odds', 'detected_at', 'notified_odds', 'notified_edge', 'notified_book', 'source'];
+      const vals = cols.map((c) => ({ notified_odds: s.soft_odds, notified_edge: s.edge, notified_book: s.soft_book, source: s.source ?? 'oa' }[c] ?? s[c]));
       const ph = cols.map((_, i) => `$${i + 1}`).join(',');
       const r = await pool.query(
         `insert into value_signals (${cols.join(',')}) values (${ph})
-         on conflict (event_id, market, group_key, outcome_name) do nothing returning id`, vals);
+         on conflict (event_id, market, group_key, outcome_name, source) do nothing returning id`, vals);
       return r.rowCount > 0 ? Number(r.rows[0].id) : null; // az új jelzés azonosítója (igaz-szerű), vagy null
     },
 
@@ -46,8 +46,8 @@ export function makeDb(databaseUrl) {
     async getNotified(s) {
       const r = await pool.query(
         `select id, notified_odds, notified_edge, notified_book, improved_count from value_signals
-          where event_id = $1 and market = $2 and group_key = $3 and outcome_name = $4`,
-        [s.event_id, s.market, s.group_key, s.outcome_name]);
+          where event_id = $1 and market = $2 and group_key = $3 and outcome_name = $4 and source = $5`,
+        [s.event_id, s.market, s.group_key, s.outcome_name, s.source ?? 'oa']);
       const x = r.rows[0];
       return x && { id: x.id, odds: x.notified_odds == null ? null : Number(x.notified_odds),
         edge: x.notified_edge == null ? null : Number(x.notified_edge), book: x.notified_book, count: x.improved_count };
@@ -199,7 +199,12 @@ export function makeDb(databaseUrl) {
                count(*)::int as n, count(*) filter (where settled_at is not null)::int as elszamolt,
                coalesce(sum(profit),0)::float as profit, avg(clv)::float as atlag_clv
           from value_signals ${where} group by 1 order by n desc`, [days]);
-      return { overall: overall.rows[0], bySport: bySport.rows, byEdge: byEdge.rows, byOdds: byOdds.rows, byMarket: byMarket.rows };
+      const bySource = await pool.query(`
+        select case when source = 'tmp' then 'TippmixPro' else 'külföldi irodák' end as forras,
+               count(*)::int as n, count(*) filter (where settled_at is not null)::int as elszamolt,
+               coalesce(sum(profit),0)::float as profit, avg(clv)::float as atlag_clv
+          from value_signals ${where} group by 1 order by n desc`, [days]);
+      return { overall: overall.rows[0], bySport: bySport.rows, byEdge: byEdge.rows, byOdds: byOdds.rows, byMarket: byMarket.rows, bySource: bySource.rows };
     },
 
     /** Sportfolio-jelzés naplózása (üzenet-ID alapján egyszer). */

@@ -77,7 +77,7 @@ export function parseRecords(records) {
     match.markets.push({
       id: m.id, name: m.name, type: m.bettingTypeName, part: m.eventPartName,
       outcomes: (rel.get(m.id) ?? []).map((oid) => outcomes.get(oid)).filter(Boolean)
-        .map((o) => ({ name: o.translatedName?.trim(), line: o.paramFloat1 ?? null, odds: offers.get(o.id) ?? null })),
+        .map((o) => ({ name: o.translatedName?.trim(), line: o.paramFloat1 ?? null, kind: o.typeName ?? null, odds: offers.get(o.id) ?? null })),
     });
   }
   return [...matches.values()];

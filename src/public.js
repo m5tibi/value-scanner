@@ -51,6 +51,7 @@ export function formatPublicSignal(s, { id, titles, stake = {}, improvedFrom } =
     ``,
     `👉 <b>${esc(describeSelection({ market: s.market, name: huName(s.outcome_name), point: s.point == null ? undefined : Number(s.point) }, s))}</b>`,
     `Odds most: <b>${Number(s.soft_odds).toFixed(2)}</b> · fair: ${Number(s.fair_odds).toFixed(2)} · előny: <b>${pct(Number(s.edge), true)}</b>`,
+    ...(s.source === 'tmp' ? ['🇭🇺 Ez az odds magyar irodánál is elérhető'] : []),
     `✅ Csak akkor, ha az odds <b>≥ ${Number(s.min_odds).toFixed(2)}</b>`,
     `💰 Tét: <b>${u(units)} egység</b> <i>(1 egység = a bankroll ${u(stake.unitPct ?? 1)}%-a)</i>`,
     ``,

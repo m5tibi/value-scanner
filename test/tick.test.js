@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 Object.assign(process.env, {
   ODDS_API_KEY: 'x', DATABASE_URL: 'postgres://teszt', SPORTS: 'auto', MARKETS: 'totals', SOFT_BOOKS: 'onexbet',
   DAILY_CREDIT_BUDGET: '0', MIN_QUOTA_REMAINING: '0', LOOKAHEAD_HOURS: '24', TELEGRAM_BOT_TOKEN: 't', TELEGRAM_CHAT_ID: 'PRIVAT',
-  PUBLIC_CHAT_ID: 'NYILVANOS', SETTLE_INTERVAL_MIN: '100000',
+  PUBLIC_CHAT_ID: 'NYILVANOS', SETTLE_INTERVAL_MIN: '100000', TMP_ENABLED: '0',
 });
 const { tick } = await import('../src/index.js');
 const { makeNotifier } = await import('../src/telegram.js');

@@ -18,6 +18,7 @@ import { isImprovement, improvedHeader } from './alerts.js';
 import { discoverOnce, discoveryDue, rotate, pickSports, unionPicks, SEED_PICKS } from './discover.js';
 import { planDailyBudget, utcMonth } from './budget.js';
 import { formatReport } from './report.js';
+import { makeTmpFeed, TMP_BOOK } from './tippmix/feed.js';
 import { formatPublicSignal, formatDailyResults, publicStake, yesterdayRange } from './public.js';
 
 const cfg = loadConfig();
@@ -163,7 +164,11 @@ async function withAltTotals({ api, db, budget, sport, events, books }) {
   return { events: events.map((e) => byId.get(e.id) ?? e), spent };
 }
 
-async function scanOnce({ api, db, notify, publicNotify, budget }) {
+async function scanOnce({ api, db, notify, publicNotify, budget, tmpFeed = cfg.tmpEnabled ? makeTmpFeed({ db, log, maxMatches: cfg.tmpMaxMatches }) : null }) {
+  try { return await scanLoop({ api, db, notify, publicNotify, budget, tmpFeed }); } finally { tmpFeed?.close(); }
+}
+
+async function scanLoop({ api, db, notify, publicNotify, budget, tmpFeed }) {
   const titles = publicNotify ? await leagueTitles(db) : {};
   const books = [cfg.sharpBook, ...cfg.softBooks].slice(0, 10);
   const allSports = await resolveSports(db);
@@ -212,7 +217,28 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
       const r = await withAltTotals({ api, db, budget, sport, events, books });
       events = r.events; spentThisTick += r.spent;
     }
-    const { signals, sharpSnapshots, rejected, stats } = scanEvents(events, cfg);
+    // TippmixPro (foci): a párosított meccsekhez "tippmixpro" irodaként hozzáadjuk az oddsait, és külön is szkenneljük.
+    let tmpSignals = [];
+    if (tmpFeed && events?.length) {
+      try {
+        const r = await tmpFeed.enrich(sport, events);
+        if (r.paired) {
+          events = r.events;
+          const t = scanEvents(events, { ...cfg, softBooks: [TMP_BOOK], minEdge: cfg.tmpMinEdge });
+          tmpSignals = t.signals.map((s) => ({ ...s, source: 'tmp' }));
+          for (const [m, v] of Object.entries(t.stats.byMarket ?? {})) {
+            const k = `TippmixPro ${m}`;
+            const x = ((st.byMarket ??= {})[k] ??= { compared: 0, positive: 0, value: 0, best: null });
+            x.compared += v.compared; x.positive += v.positive; x.value += v.value;
+            if (v.best !== null && (x.best === null || v.best > x.best)) x.best = v.best;
+          }
+          log(`TippmixPro: ${sport} – ${r.paired} meccs párosítva, ${tmpSignals.length} value.`);
+        }
+      } catch (e) { log(`TippmixPro-hiba (${sport}): ${e.message}`); }
+    }
+    const { signals: oaSignals, sharpSnapshots, rejected, stats } = scanEvents(events, { ...cfg, softBooks: cfg.softBooks.filter((b) => b !== TMP_BOOK) });
+    // A TippmixPro-tippek előbb mennek: meccsenként egy nyilvános tipp, és a hazai irodánál is megjátszható az értékesebb.
+    const signals = [...tmpSignals, ...oaSignals];
     for (const [k, v] of Object.entries(rejected)) rejectedTotal[k] = (rejectedTotal[k] ?? 0) + v;
     for (const k of ['events', 'withSharp', 'compared', 'positive']) st[k] += stats[k];
     for (const [m, v] of Object.entries(stats.byMarket ?? {})) {
@@ -244,7 +270,7 @@ async function scanOnce({ api, db, notify, publicNotify, budget }) {
       }
       // Már kiküldtük: csak akkor szólunk újra, ha jobb az odds ÉS a friss Pinnacle-ből számolt előny is nőtt.
       const prev = await db.getNotified(s);
-      const cur = { odds: s.soft_odds, edge: s.edge, book: s.soft_book };
+      const cur = { odds: s.soft_odds, edge: s.edge, book: s.soft_book, source: s.source };
       if (isImprovement(prev, cur, { minDelta: cfg.improveMinDelta, maxCount: cfg.improveMax })) {
         const nice = (x) => ({ ...x, book: bookName(x.book) });
         await notify(`${improvedHeader(nice(prev), nice(cur))}\n\n${formatSignal(s)}`);

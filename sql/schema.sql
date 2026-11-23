@@ -217,3 +217,13 @@ update value_signals v set excluded = true, exclude_reason = 'duplikátum (h2h -
    and exists (select 1 from value_signals o
                 where o.event_id = v.event_id and o.market = v.market and o.outcome_name = v.outcome_name
                   and o.group_key = 'h2h' and o.id < v.id and not o.excluded);
+
+-- 2026-11-23: forrás oszlop – ugyanaz a kimenetel külön sorban lehet a külföldi irodákból (oa) és a TippmixPro-ból (tmp)
+alter table value_signals add column if not exists source text not null default 'oa';
+do $$ declare c text; begin
+  -- a régi (forrás nélküli) egyediségi megkötés eltávolítása, bármi is a neve
+  for c in select conname from pg_constraint where conrelid = 'value_signals'::regclass and contype = 'u' loop
+    execute format('alter table value_signals drop constraint %I', c);
+  end loop;
+end $$;
+create unique index if not exists value_signals_uniq_src on value_signals (event_id, market, group_key, outcome_name, source);

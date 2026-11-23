@@ -95,3 +95,10 @@ test('válogatottak neve magyarul, klubnevekhez nem nyúl', async () => {
     null, { dayLabel: 'november 17-i' });
   assert.match(t, /#33 Magyarország – Észak-Írország · Észak-Írország győzelem \(1X2, rendes játékidő\)/);
 });
+
+test('nyilvános jelzés: TippmixPro-forrásnál "magyar irodánál is elérhető" sor, irodanév nélkül', () => {
+  const t = formatPublicSignal({ ...sig, source: 'tmp', soft_book: 'tippmixpro' }, { id: 5 });
+  assert.match(t, /🇭🇺 Ez az odds magyar irodánál is elérhető/);
+  assert.doesNotMatch(t, /tippmix/i);
+  assert.doesNotMatch(formatPublicSignal(sig, { id: 6 }), /magyar irodánál/);
+});
