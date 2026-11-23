@@ -20,10 +20,12 @@
     "sf:channels": "node --env-file=.env src/sportfolio/listener.js --channels",
     "sf:backfill": "node --env-file=.env src/sportfolio/listener.js --backfill 50",
     "sf:listen": "node --env-file=.env src/sportfolio/listener.js",
-    "probe:report": "node --env-file=.env src/probe/report.js"
+    "probe:report": "node --env-file=.env src/probe/report.js",
+    "tmp:probe": "node src/tippmix/probe.js"
   },
   "dependencies": {
     "pg": "^8.11.0",
-    "telegram": "^2.26.22"
+    "telegram": "^2.26.22",
+    "ws": "^8.23.0"
   }
 }
