@@ -48,7 +48,7 @@ Adatbázis: **Supabase Postgres** (`DATABASE_URL`); a séma a `sql/schema.sql` f
 ## 3. Teendők (prioritás szerint)
 
 ### A) Nyilvános indulás előkészítése
-1. **A sorszám nullázása induláskor** (#1-től), és a tesztidőszak üzeneteinek törlése a csatornából. Ehhez kell egy egyszeri migráció vagy egy `PUBLIC_NO_OFFSET` változó. Az új összesítő csak az indulás utáni tippeket számolja (pl. egy `PUBLIC_SINCE` dátum alapján).
+1. **A sorszám nullázása induláskor** (#1-től), és a tesztidőszak üzeneteinek törlése a csatornából. **Kész (kód):** `PUBLIC_SINCE` változó (Render, `value-scanner` cron) – ettől #1-től számoz, és az összesítő csak az indulás utáni tippeket számolja. Teendő: induláskor beállítani, a régi üzeneteket kézzel törölni.
 2. Egy „utólag elszámolva” sor a napi posztban azoknak a tippeknek, amelyek eredménye később érkezett (opcionális).
 3. A csatorna leírása, logója és kitűzött üzenete: hogyan használd a tippeket, mi az egység, mi a CLV, felelős játék, 18+.
 

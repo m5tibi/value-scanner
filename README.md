@@ -203,3 +203,7 @@ téttel egységben – irodanév nélkül. Ha egy kiküldött tippre később jo
 
 Minden nap `PUBLIC_DAILY_AT` (alap 09:00) után napi eredményposzt megy ki: az előző nap tippjei (nyert/vesztett, eredmény),
 napi mérleg 1 egységes tétekkel, és a rendszer utolsó 30 napjának ROI-ja és CLV-je. Kézzel: `node src/index.js --public-daily`.
+
+`PUBLIC_SINCE` (pl. `2026-11-26 08:00`, budapesti idő, vagy időzónás ISO-idő): a fizetős csatorna indulása. Ettől kezdve
+a sorszám #1-től indul, a napi poszt és az összesítő csak az ezutáni tippeket számolja, a „meccsenként 1 tipp” szabály és a
+🔔-követés pedig a tesztidőszak tippjeit már nem nézi. A régi sorok az adatbázisban maradnak.

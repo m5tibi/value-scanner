@@ -8,6 +8,27 @@ export const GOAL_LEAGUES = [
   'soccer_switzerland_superleague', 'soccer_austria_bundesliga', 'soccer_norway_eliteserien', 'soccer_usa_mls',
 ].join(',');
 
+/**
+ * PUBLIC_SINCE: a fizetős csatorna indulása. Elfogad időzónás ISO-időt (2026-11-26T08:00:00+01:00), vagy budapesti
+ * helyi időt ("2026-11-26", "2026-11-26 08:00"). Érvénytelen vagy üres érték: null (nincs szűrés).
+ */
+export function parsePublicSince(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (m) {
+    const [, y, mo, d, h = '0', mi = '0', se = '0'] = m;
+    const guess = Date.UTC(+y, +mo - 1, +d, +h, +mi, +se);
+    // a budapesti eltolás az adott pillanatban (téli / nyári idő)
+    const wall = new Date(new Date(guess).toLocaleString('en-US', { timeZone: 'Europe/Budapest' }));
+    const utcWall = new Date(new Date(guess).toLocaleString('en-US', { timeZone: 'UTC' }));
+    const t = new Date(guess - (wall - utcWall));
+    return Number.isNaN(t.getTime()) ? null : t;
+  }
+  const t = new Date(s);
+  return Number.isNaN(t.getTime()) ? null : t;
+}
+
 export function loadConfig(rawEnv = process.env) {
   // Sor végi "# megjegyzés" levágása (egyes .env-betöltők nem teszik meg).
   const env = Object.fromEntries(Object.entries(rawEnv).map(([k, v]) => [k, typeof v === 'string' ? v.replace(/\s+#.*$/, '').trim() : v]));
@@ -75,6 +96,8 @@ export function loadConfig(rawEnv = process.env) {
       lowTierRe: env.PUBLIC_LOW_TIER_RE || undefined,     // alsóbb osztály / kupa: fél tét (alapértelmezés: public.js LOW_TIER_RE)
     },
     publicDailyAt: env.PUBLIC_DAILY_AT || '09:00',
+    // A fizetős csatorna indulása: a sorszám innen #1-től indul, és az összesítők csak az ezutáni tippeket számolják.
+    publicSince: parsePublicSince(env.PUBLIC_SINCE),
 
     // Követő értesítések
     improveMinDelta: num(env.IMPROVE_MIN_DELTA, 0.02),   // ennyivel nagyobb előny kell a 🔔-hoz

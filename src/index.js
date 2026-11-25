@@ -398,7 +398,7 @@ async function tick({ api, db, notify, publicNotify }) {
 
 async function main() {
   const args = new Set(process.argv.slice(2));
-  const db = makeDb(cfg.databaseUrl);
+  const db = makeDb(cfg.databaseUrl, { publicSince: cfg.publicSince });
   // Biztonsági zár: ha a privát és a nyilvános csatorna ugyanaz, a privát üzenetek (papír-jelzés, riportok)
   // NEM mennek ki oda, csak a naplóba – így előfizetők elé nem kerülhet belső tartalom.
   const sameChat = cfg.publicChatId && String(cfg.publicChatId) === String(cfg.telegramChatId);

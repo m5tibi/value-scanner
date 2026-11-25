@@ -1,13 +1,23 @@
 import pg from 'pg';
 import { readFile } from 'node:fs/promises';
 
-export function makeDb(databaseUrl) {
+/** SQL-feltétel a fizetős csatorna indulása utáni nyilvános tippekre (a dátum Date-ből jön, így biztonságos literál). */
+export function publicSinceSql(since) {
+  if (!since) return '';
+  const t = new Date(since);
+  if (Number.isNaN(t.getTime())) return '';
+  return ` and public_posted_at >= '${t.toISOString()}'::timestamptz`;
+}
+
+export function makeDb(databaseUrl, { publicSince = null } = {}) {
   if (!databaseUrl) throw new Error('DATABASE_URL hiányzik');
   const pool = new pg.Pool({
     connectionString: databaseUrl,
     ssl: /localhost|127\.0\.0\.1/.test(databaseUrl) ? false : { rejectUnauthorized: false },
     max: 3,
   });
+
+  const SINCE = publicSinceSql(publicSince);
 
   return {
     pool,
@@ -54,9 +64,12 @@ export function makeDb(databaseUrl) {
     },
 
     /** A következő nyilvános sorszám (1-től). A kizárt jelzések számát sem használjuk újra:
-     *  a csatornán egyszer már kiment szám nem ismétlődhet (2026-11-14: kétszer jelent meg a #15). */
+     *  a csatornán egyszer már kiment szám nem ismétlődhet (2026-11-14: kétszer jelent meg a #15).
+     *  PUBLIC_SINCE esetén csak az indulás utáni tippek számítanak, így a fizetős csatorna #1-től indul. */
     async nextPublicNo() {
-      const r = await pool.query(`select coalesce(max(public_no), 0) + 1 as n from value_signals`);
+      const r = await pool.query(SINCE
+        ? `select coalesce(max(public_no), 0) + 1 as n from value_signals where public_posted_at is not null${SINCE}`
+        : `select coalesce(max(public_no), 0) + 1 as n from value_signals`);
       return Number(r.rows[0].n);
     },
 
@@ -64,7 +77,7 @@ export function makeDb(databaseUrl) {
     async publicForEvent(eventId) {
       const r = await pool.query(
         `select id, public_no, market, group_key, outcome_name from value_signals
-          where event_id = $1 and public_posted_at is not null and not excluded order by public_posted_at limit 1`, [eventId]);
+          where event_id = $1 and public_posted_at is not null and not excluded${SINCE} order by public_posted_at limit 1`, [eventId]);
       return r.rows[0] ?? null;
     },
 
@@ -74,7 +87,7 @@ export function makeDb(databaseUrl) {
 
     /** A jelzés nyilvános sorszáma, vagy null, ha nem ment ki nyilvánosan. */
     async isPublic(id) {
-      const r = await pool.query(`select public_no, public_posted_at from value_signals where id = $1`, [id]);
+      const r = await pool.query(`select public_no, public_posted_at from value_signals where id = $1${SINCE}`, [id]);
       const x = r.rows[0];
       return x?.public_posted_at ? (Number(x.public_no) || true) : null;
     },
@@ -82,7 +95,7 @@ export function makeDb(databaseUrl) {
     /** A [start, end) között kezdődött, nyilvánosan kiküldött jelzések. */
     async publicSignalsBetween(start, end) {
       const r = await pool.query(
-        `select * from value_signals where public_posted_at is not null and not excluded
+        `select * from value_signals where public_posted_at is not null and not excluded${SINCE}
            and commence_time >= $1 and commence_time < $2 order by public_no nulls last, commence_time, id`, [start, end]);
       return r.rows;
     },
@@ -92,7 +105,7 @@ export function makeDb(databaseUrl) {
      * Ha a csatorna első tippje 30 napnál frissebb, az eddigi összeset adja (since=true), különben az utolsó 30 napot.
      */
     async publicReport(days = 30) {
-      const base = `from value_signals where public_posted_at is not null and not excluded`;
+      const base = `from value_signals where public_posted_at is not null and not excluded${SINCE}`;
       const first = await pool.query(`select min(public_posted_at) as t ${base}`);
       const t = first.rows[0]?.t;
       const all = !t || new Date(t).getTime() > Date.now() - days * 86400e3;
