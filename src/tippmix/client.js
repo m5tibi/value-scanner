@@ -58,14 +58,15 @@ export function connectTmp({ url = TMP_URL, timeoutMs = 15000, log = () => {} } 
 export const topics = {
   tournaments: (sportId, venueId, lang = 'hu') => `/sports/${OPERATOR}/${lang}/tournaments/${sportId}/${venueId}`,
   leagueMatches: (tournamentId, lang = 'hu') => `/sports/${OPERATOR}/${lang}/tournament-aggregator-groups-overview/${tournamentId}/default-event-info/BOTH/3196`,
-  matchOdds: (matchId, group = 'NEPSZERU', lang = 'hu') => `/sports/${OPERATOR}/${lang}/${matchId}/match-odds/market-group/${group}`,
+  matchOdds: (matchId, group = 'NEPSZERU', lang = 'hu') => // a csoportkulcs sportáganként más (foci: NEPSZERU, kosár: Nepszeru)
+    `/sports/${OPERATOR}/${lang}/${matchId}/match-odds/market-group/${group}`,
 };
 
 /** Rekordokból meccsek → piacok → kimenetelek (odds). */
 export function parseRecords(records) {
   const matches = new Map(), markets = new Map(), outcomes = new Map(), offers = new Map(), rel = new Map();
   for (const r of records) {
-    if (r._type === 'MATCH') matches.set(r.id, { id: r.id, name: r.name, start: new Date(r.startTime), league: r.parentName, sport: r.sportName, markets: [] });
+    if (r._type === 'MATCH') matches.set(r.id, { id: r.id, name: r.name, home: r.homeParticipantName ?? null, away: r.awayParticipantName ?? null, start: new Date(r.startTime), league: r.parentName, sport: r.sportName, markets: [] });
     else if (r._type === 'MARKET') markets.set(r.id, r);
     else if (r._type === 'OUTCOME') outcomes.set(r.id, r);
     else if (r._type === 'BETTING_OFFER' && r.isAvailable !== false && r.statusId === '1') offers.set(r.outcomeId, r.odds);

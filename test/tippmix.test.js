@@ -36,7 +36,7 @@ test('TippmixPro: ország a sport_key-ből', () => {
   assert.equal(countryFor('soccer_efl_champ').name, 'Anglia');
   assert.equal(countryFor('soccer_germany_bundesliga2').name, 'Németország');
   assert.equal(countryFor('soccer_uefa_champs_league').intl, true);
-  assert.equal(countryFor('basketball_nba'), null);
+  assert.equal(countryFor('icehockey_nhl')?.name ?? null, null);
 });
 
 test('TippmixPro: párosítás csapatnév + idő alapján (Charlton – Charlton Athletic)', () => {
@@ -91,5 +91,23 @@ test('TippmixPro-feed: ligakeresés az országlistából, gyorsítótár, meccs-
   calls.length = 0;
   await feed.enrich('soccer_efl_champ', [ev()], now); // második kör: nincs újra ország- és ligakeresés
   assert.ok(!calls.some((t) => /tournaments\/1\//.test(t)));
-  assert.equal((await feed.enrich('basketball_nba', [ev()], now)).paired, 0);
+  assert.equal((await feed.enrich('icehockey_nhl', [ev()], now)).paired, 0);
+});
+
+test('TippmixPro kosár: "Ki nyeri?" → h2h, Pontszám → totals, ázsiai hendikep → spreads (valódi NBA-piacnevek)', () => {
+  const tm = { name: 'Philadelphia - Miami', home: 'Philadelphia', away: 'Miami', start: new Date('2026-11-26T00:00:00Z'), markets: [
+    { type: 'Ki nyeri?', part: 'Hosszabbítással', outcomes: [{ name: 'Philadelphia', odds: 1.83 }, { name: 'Miami', odds: 2.01 }] },
+    { type: '1X2', part: 'Rendes játékidő', outcomes: [{ name: 'Philadelphia', odds: 1.89 }, { name: 'Döntetlen', odds: 14 }, { name: 'Miami', odds: 2.09 }] },
+    { type: 'Pontszám', part: 'Hosszabbítással', outcomes: [{ name: 'Több, mint 238.5', line: 238.5, kind: 'Total Score Over', odds: 1.91 }, { name: 'Kevesebb, mint 238.5', line: 238.5, kind: 'Total Score Under', odds: 1.88 },
+      { name: 'Miami: Több, mint 118.5', line: 118.5, kind: 'Team Score Over/Under', odds: 1.84 }] },
+    { type: 'Ázsiai hendikep', part: 'Hosszabbítással', outcomes: [{ name: 'Miami (+1.5)', line: 1.5, kind: 'Handicap Winner With Money Back On Draw', odds: 1.85 }, { name: 'Philadelphia (-1.5)', line: -1.5, kind: 'Handicap Winner With Money Back On Draw', odds: 1.95 }] },
+  ] };
+  const e = { id: 'n1', sport_key: 'basketball_nba', home_team: 'Philadelphia 76ers', away_team: 'Miami Heat', commence_time: '2026-11-26T00:00:00Z', bookmakers: [] };
+  assert.equal(pairEvents([e], [tm]).length, 1);
+  const bm = toBookmaker(tm, e);
+  assert.deepEqual(bm.markets.find((m) => m.key === 'h2h').outcomes, [{ name: 'Philadelphia 76ers', price: 1.83 }, { name: 'Miami Heat', price: 2.01 }]);
+  assert.deepEqual(bm.markets.find((m) => m.key === 'totals').outcomes, [{ name: 'Over', point: 238.5, price: 1.91 }, { name: 'Under', point: 238.5, price: 1.88 }]);
+  assert.deepEqual(bm.markets.find((m) => m.key === 'spreads').outcomes, [{ name: 'Miami Heat', point: 1.5, price: 1.85 }, { name: 'Philadelphia 76ers', point: -1.5, price: 1.95 }]);
+  assert.equal(countryFor('basketball_nba').name, 'USA');
+  assert.equal(countryFor('basketball_euroleague').intl, true);
 });
