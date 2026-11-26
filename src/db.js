@@ -66,6 +66,14 @@ export function makeDb(databaseUrl) {
      * csapatnevek + kezdési idő (±6 óra) alapján is, mert ugyanaz a meccs más azonosítóval is visszajöhet
      * (pl. átütemezés vagy másik liga-kulcs alatt) – így nem mehet ki ellentétes tipp ugyanarra a meccsre.
      */
+    /** Volt-e már (nem kizárt) jelzés ugyanennek a piacnak egy MÁSIK kimenetelére (bármelyik forrásból)? */
+    async hasOpposite(s) {
+      const r = await pool.query(
+        `select 1 from value_signals where event_id = $1 and market = $2 and group_key = $3 and outcome_name <> $4 and not excluded limit 1`,
+        [s.event_id, s.market, s.group_key, s.outcome_name]);
+      return r.rowCount > 0;
+    },
+
     async publicForEvent(s) {
       const sig = typeof s === 'string' ? { event_id: s } : s;
       const r = await pool.query(

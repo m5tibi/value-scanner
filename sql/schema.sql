@@ -197,8 +197,10 @@ alter table value_signals add column if not exists excluded boolean not null def
 alter table value_signals add column if not exists exclude_reason text;
 -- 2026-11-13: kétesélyes Pinnacle vs. háromesélyes soft h2h (kézilabda) – és minden olyan eset, ahol
 -- ugyanarra a meccsre és piacra két különböző kimenetel is jelzés lett
+-- (2026-11-26: csak a 11-14 előtti sorokra – korábban minden induláskor lefutott, és a később, más időpontban
+--  jött ellentétes jelzés miatt érvényes nyilvános tippeket is kizárt.)
 update value_signals v set excluded = true, exclude_reason = 'h2h 2-esélyes vs 3-esélyes / mindkét oldal'
- where not v.excluded and exists (
+ where not v.excluded and v.detected_at < '2026-11-14' and exists (
    select 1 from value_signals o
     where o.event_id = v.event_id and o.market = v.market and o.group_key = v.group_key and o.outcome_name <> v.outcome_name);
 -- 2026-11-13: a kizárt #6/#7 helyére a #8 lép (#6), hogy a csatorna számozása folyamatos legyen.
@@ -227,3 +229,14 @@ do $$ declare c text; begin
   end loop;
 end $$;
 create unique index if not exists value_signals_uniq_src on value_signals (event_id, market, group_key, outcome_name, source);
+
+-- 2026-11-26: a fenti (11-13-i) szabály tévesen kizárt későbbi sorainak visszaállítása
+update value_signals set excluded = false, exclude_reason = null
+ where excluded and exclude_reason = 'h2h 2-esélyes vs 3-esélyes / mindkét oldal' and detected_at >= '2026-11-14';
+-- Ugyanarra a meccsre később kiment, másik nyilvános tipp: visszavonva (a korábbi marad érvényes) – pl. #140, #145
+update value_signals v set excluded = true, exclude_reason = 'ellentetes nyilvanos tipp - visszavonva'
+ where not v.excluded and v.public_posted_at is not null and exists (
+   select 1 from value_signals o
+    where o.id <> v.id and o.public_posted_at is not null and o.public_posted_at < v.public_posted_at and not o.excluded
+      and (o.event_id = v.event_id or (o.home_team = v.home_team and o.away_team = v.away_team
+           and abs(extract(epoch from (o.commence_time - v.commence_time))) < 6 * 3600)));

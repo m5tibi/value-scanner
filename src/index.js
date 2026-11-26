@@ -250,6 +250,12 @@ async function scanLoop({ api, db, notify, publicNotify, budget, tmpFeed }) {
 
     for (const snap of sharpSnapshots) await db.updateClosing(snap);
     for (const s of signals) {
+      // Ugyanannak a piacnak az ellentétes kimenetelére korábban már ment jelzés (más időpontban vagy más forrásból):
+      // nem küldünk "mindkét oldalra" tippet – a korábbi marad.
+      if (await db.hasOpposite(s)) {
+        log(`Kihagyva – ellentétes korábbi jelzés van: ${s.home_team} – ${s.away_team} ${s.market} ${s.outcome_name} (${s.source ?? 'oa'})`);
+        continue;
+      }
       const newId = await db.insertSignal(s);
       if (newId) {
         newSignals++;
