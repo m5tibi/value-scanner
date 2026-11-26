@@ -44,6 +44,8 @@ export function loadConfig(rawEnv = process.env) {
     settleIntervalMin: num(env.SETTLE_INTERVAL_MIN, 60),
     minQuotaRemaining: num(env.MIN_QUOTA_REMAINING, 200),
     // Napi kreditkeret (budapesti nap szerint). 0 = nincs korlát; "auto" = a megmaradt havi keretből számolja (src/budget.js).
+    // Kizárt ligák (tartósan negatív CLV) – ezeket a szkenner nem nézi, akkor sem, ha a feltérképezés kiválasztja
+    blockedSports: list(env.BLOCKED_SPORTS, 'icehockey_liiga'),
     // TippmixPro-oddsok (foci): a Pinnacle-hez mérve külön forrásként (ingyenes, nem fogyaszt kreditet)
     tmpEnabled: !['0', 'false', 'off'].includes(String(env.TMP_ENABLED ?? '1').trim().toLowerCase()),
     tmpMinEdge: num(env.TMP_MIN_EDGE, num(env.MIN_EDGE, 0.02)),

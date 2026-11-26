@@ -63,7 +63,7 @@ async function resolveSports(db) {
   } catch { /* régi/hibás állapot */ }
   if (!auto.length) auto = ((await db.getState('auto_sports')) ?? '').split(',').filter(Boolean);
   const all = [...new Set([...cfg.pinnedSports, ...(auto.length ? auto : FALLBACK_SPORTS), ...extra])];
-  return all;
+  return all.filter((s) => !cfg.blockedSports.includes(s));
 }
 
 const budapestDay = (d = new Date()) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' });
