@@ -61,10 +61,20 @@ export function makeDb(databaseUrl) {
     },
 
     /** Ment-e már ki nyilvános jelzés erre a meccsre (bármely piacon / kimenetelen)? Ha igen, azt adja vissza. */
-    async publicForEvent(eventId) {
+    /**
+     * Ment-e már nyilvános tipp erre a meccsre. Nem csak az Odds API esemény-azonosítója alapján keres, hanem
+     * csapatnevek + kezdési idő (±6 óra) alapján is, mert ugyanaz a meccs más azonosítóval is visszajöhet
+     * (pl. átütemezés vagy másik liga-kulcs alatt) – így nem mehet ki ellentétes tipp ugyanarra a meccsre.
+     */
+    async publicForEvent(s) {
+      const sig = typeof s === 'string' ? { event_id: s } : s;
       const r = await pool.query(
         `select id, public_no, market, group_key, outcome_name from value_signals
-          where event_id = $1 and public_posted_at is not null and not excluded order by public_posted_at limit 1`, [eventId]);
+          where public_posted_at is not null and not excluded
+            and (event_id = $1 or (home_team = $2 and away_team = $3
+                 and abs(extract(epoch from (commence_time - $4::timestamptz))) < 6 * 3600))
+          order by public_posted_at limit 1`,
+        [sig.event_id, sig.home_team ?? null, sig.away_team ?? null, sig.commence_time ?? null]);
       return r.rows[0] ?? null;
     },
 

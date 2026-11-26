@@ -257,7 +257,7 @@ async function scanLoop({ api, db, notify, publicNotify, budget, tmpFeed }) {
         if (publicNotify && isPublicWorthy(s)) {
           // Meccsenként legfeljebb EGY nyilvános tipp: egy későbbi (akár ellentétes) kimenetel nem megy ki,
           // így az előfizetők nem fogadhatnak saját maguk ellen (pl. előbb döntetlen, aztán hazai győzelem).
-          const already = await db.publicForEvent(s.event_id);
+          const already = await db.publicForEvent(s);
           if (already) {
             log(`Nyilvános jelzés kihagyva – erre a meccsre már ment tipp (#${already.public_no}): ${s.home_team} – ${s.away_team} ${s.market} ${s.outcome_name}`);
             continue;

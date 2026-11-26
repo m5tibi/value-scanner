@@ -19,7 +19,7 @@ function memDb() {
     setState: async (k, v) => { state.set(k, String(v)); },
     insertSignal: async (s) => { if (signals.some((x) => x.event_id === s.event_id && x.market === s.market && x.group_key === s.group_key && x.outcome_name === s.outcome_name)) return null; signals.push({ ...s, id: signals.length + 1 }); return signals.length; },
     getNotified: async () => null, markImproved: async () => {}, updateClosing: async () => {},
-    publicForEvent: async (eid) => signals.find((x) => x.event_id === eid && x.public_no) ?? null,
+    publicForEvent: async (s) => signals.find((x) => x.public_no && (x.event_id === s.event_id || (x.home_team === s.home_team && x.away_team === s.away_team && Math.abs(Date.parse(x.commence_time) - Date.parse(s.commence_time)) < 6 * 3600e3))) ?? null,
     nextPublicNo: async () => Math.max(0, ...signals.map((x) => x.public_no ?? 0)) + 1,
     markPublic: async (id, stake, no) => { signals[id - 1].public_stake = stake; signals[id - 1].public_no = no; }, isPublic: async () => null,
     openSportsToSettle: async () => [], report: async () => ({ overall: {} }), publicReport: async () => ({}), publicSignalsBetween: async () => [],
