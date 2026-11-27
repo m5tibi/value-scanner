@@ -45,7 +45,7 @@ export function loadConfig(rawEnv = process.env) {
     minQuotaRemaining: num(env.MIN_QUOTA_REMAINING, 200),
     // Napi kreditkeret (budapesti nap szerint). 0 = nincs korlát; "auto" = a megmaradt havi keretből számolja (src/budget.js).
     // Kizárt ligák (tartósan negatív CLV) – ezeket a szkenner nem nézi, akkor sem, ha a feltérképezés kiválasztja
-    blockedSports: list(env.BLOCKED_SPORTS, 'icehockey_liiga'),
+    blockedSports: list(env.BLOCKED_SPORTS, 'icehockey_liiga,icehockey_sweden_hockey_league,icehockey_sweden_allsvenskan'),
     // TippmixPro-oddsok (foci): a Pinnacle-hez mérve külön forrásként (ingyenes, nem fogyaszt kreditet)
     tmpEnabled: !['0', 'false', 'off'].includes(String(env.TMP_ENABLED ?? '1').trim().toLowerCase()),
     tmpMinEdge: num(env.TMP_MIN_EDGE, num(env.MIN_EDGE, 0.02)),
@@ -70,6 +70,9 @@ export function loadConfig(rawEnv = process.env) {
     publicMinEdge: num(env.PUBLIC_MIN_EDGE, 0),         // ennél kisebb előnyt nem küld ki nyilvánosan (0 = mint MIN_EDGE)
     publicMinOdds: num(env.PUBLIC_MIN_ODDS, 1.5),       // nyilvánosan csak ennél nagyobb odds (nagy esélyes: kevés nyerés, gyorsan eltűnik)
     publicMaxOdds: num(env.PUBLIC_MAX_ODDS, 5),
+    // Kihagyott odds-sáv a nyilvános csatornában ("tól-ig", a felső határ már nem tartozik bele); üres = nincs.
+    // 2026-11-27: a 2,50–3,49 sáv CLV-je tartósan nulla körül (31 tipp, −0,4%).
+    publicSkipOdds: (String(env.PUBLIC_SKIP_ODDS ?? '2.5-3.5').match(/^\s*([\d.]+)\s*-\s*([\d.]+)\s*$/) ?? []).slice(1).map(Number),
     publicStake: {
       unitPct: num(env.PUBLIC_UNIT_PCT, 1),
       kellyFraction: num(env.PUBLIC_KELLY_FRACTION, 0.25),

@@ -101,8 +101,10 @@ async function diagText(db) {
 
 /** Mehet-e a jelzés a nyilvános csatornába: elég nagy előny és előfizetőnek is értelmes odds-tartomány. */
 function isPublicWorthy(s) {
+  const [skipLo, skipHi] = cfg.publicSkipOdds ?? [];
+  const inSkip = skipLo != null && s.soft_odds >= skipLo && s.soft_odds < skipHi;
   return s.edge >= Math.max(cfg.minEdge, cfg.publicMinEdge)
-    && s.soft_odds >= cfg.publicMinOdds && s.soft_odds <= cfg.publicMaxOdds;
+    && s.soft_odds >= cfg.publicMinOdds && s.soft_odds <= cfg.publicMaxOdds && !inSkip;
 }
 
 /** Liga-nevek a feltérképezésből (kulcs -> cím), a nyilvános üzenetekhez. */
@@ -445,7 +447,7 @@ async function main() {
 }
 
 // Közvetlen futtatáskor indul; tesztből importálva csak a függvényeket adja.
-export { tick, scanOnce };
+export { tick, scanOnce, isPublicWorthy };
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   main().catch((e) => { console.error(e); process.exit(1); });
 }

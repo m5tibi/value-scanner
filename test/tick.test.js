@@ -132,3 +132,13 @@ test('gólgazdag liga (A-League): a fő gólvonal is lekérődik, és az alterna
   assert.ok(calls.markets.includes('totals'), 'a gólgazdag ligában a totals piac is kell');
   assert.equal(calls.event, 1, 'egy meccs alternatív vonalait ALT_TOTALS_EVERY_MIN-en belül csak egyszer kérdezzük');
 });
+
+test('nyilvános szűrő: a 2,50–3,49 odds-sáv kimarad, a 3,50 és a 2,49 mehet', async () => {
+  const { isPublicWorthy } = await import('../src/index.js');
+  const s = (o) => ({ edge: 0.03, soft_odds: o });
+  assert.equal(isPublicWorthy(s(2.49)), true);
+  assert.equal(isPublicWorthy(s(2.5)), false);
+  assert.equal(isPublicWorthy(s(3.45)), false);
+  assert.equal(isPublicWorthy(s(3.5)), true);
+  assert.equal(isPublicWorthy(s(1.4)), false);
+});
