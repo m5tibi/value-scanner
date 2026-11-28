@@ -58,6 +58,7 @@ export function scanEvents(events, cfg, now = new Date()) {
           let best = null;
           for (const book of ev.bookmakers) {
             if (!cfg.softBooks.includes(book.key)) continue;
+            if (softExcluded(cfg, ev.sport_key, mkKey, book.key)) { reject('iroda_mas_szabaly'); continue; }
             const mk = marketsOf(book).get(mkKey);
             if (!mk) continue;
             const g = groupOutcomes(mk, ev).get(groupKey);
@@ -121,3 +122,13 @@ export function scanEvents(events, cfg, now = new Date()) {
 }
 
 function round(x, d) { const f = 10 ** d; return Math.round(x * f) / f; }
+
+/**
+ * Iroda + sportág + piac kizárás, ahol az iroda piaca mást jelent, mint a Pinnacle-é.
+ * Pl. 1xBet jégkorong: a gólszám és a hendikep csak a rendes játékidőre szól, a Pinnacle-é hosszabbítással –
+ * a két ár nem ugyanarra a fogadásra vonatkozik, a látszólagos előny hamis.
+ * cfg.softExclude: [{ sport: 'icehockey', market: 'totals', book: 'onexbet' }, ...]
+ */
+export function softExcluded(cfg, sportKey, market, book) {
+  return (cfg.softExclude ?? []).some((r) => String(sportKey).startsWith(r.sport) && r.market === market && r.book === book);
+}

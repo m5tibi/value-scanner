@@ -30,6 +30,9 @@ export function loadConfig(rawEnv = process.env) {
     altTotalsEveryMin: num(env.ALT_TOTALS_EVERY_MIN, 240),     // egy meccset legfeljebb ennyi percenként kérdezünk újra
     sharpBook: env.SHARP_BOOK || 'pinnacle',
     softBooks: list(env.SOFT_BOOKS, 'onexbet,marathonbet'),
+    // Iroda + sportág + piac kizárás "sportág:piac:iroda" formában (pl. 1xBet jégkorong: csak rendes játékidő)
+    softExclude: list(env.SOFT_EXCLUDE, 'icehockey:totals:onexbet,icehockey:spreads:onexbet')
+      .map((x) => x.split(':')).filter((p) => p.length === 3).map(([sport, market, book]) => ({ sport, market, book })),
 
     minEdge: num(env.MIN_EDGE, 0.02),
     maxEdge: num(env.MAX_EDGE, 0.10),

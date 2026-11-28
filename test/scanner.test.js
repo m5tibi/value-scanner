@@ -110,3 +110,18 @@ test('ugyanannak a piacnak két kimenetele egyszerre nem lehet jelzés', async (
   assert.equal(r.signals.length, 0);
   assert.equal(r.rejected.mindket_oldal, 1);
 });
+
+test('jégkorong: az 1xBet gólszám-ára (csak rendes játékidő) nem hasonlítható a Pinnacle-éhez – kizárva', async () => {
+  const { scanEvents } = await import('../src/scanner.js');
+  const now = new Date('2026-11-28T10:00:00Z');
+  const t = now.toISOString();
+  const ev = { id: 'h1', sport_key: 'icehockey_nhl', home_team: 'Buffalo Sabres', away_team: 'Pittsburgh Penguins', commence_time: '2026-11-28T23:00:00Z', bookmakers: [
+    { key: 'pinnacle', last_update: t, markets: [{ key: 'totals', last_update: t, outcomes: [{ name: 'Over', point: 6.5, price: 1.95 }, { name: 'Under', point: 6.5, price: 1.95 }] }] },
+    { key: 'onexbet', last_update: t, markets: [{ key: 'totals', last_update: t, outcomes: [{ name: 'Over', point: 6.5, price: 2.21 }, { name: 'Under', point: 6.5, price: 1.62 }] }] },
+  ] };
+  const cfg = { sharpBook: 'pinnacle', softBooks: ['onexbet'], minEdge: 0.02, maxEdge: 0.3, minOdds: 1.3, maxOdds: 5, maxStalenessSec: 600, minMinutesToStart: 0, devigMethod: 'power' };
+  assert.equal(scanEvents([ev], cfg, now).signals.length, 1, 'szabály nélkül hamis value');
+  const r = scanEvents([ev], { ...cfg, softExclude: [{ sport: 'icehockey', market: 'totals', book: 'onexbet' }] }, now);
+  assert.equal(r.signals.length, 0);
+  assert.ok(r.rejected.iroda_mas_szabaly >= 1);
+});
